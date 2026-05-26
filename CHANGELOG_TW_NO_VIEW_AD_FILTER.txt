@@ -1,0 +1,5 @@
+TW cancelled-row update
+- TW scraper now removes rows that do not have a View Ad link.
+- This is based on current Tidewater page behavior: cancelled rows appear gray and have no View Ad.
+- The fallback text parser also requires a View Ad before the next TW row/date/county block.
+- Keeps the efficient external environment setup from the prior build.

@@ -1,0 +1,11 @@
+AuctionAI v12 - Scrape Timeout / No-Hang Patch
+
+Fixes:
+- Removed the slow AC link lookup behavior that rescanned the full AC page once for every property row.
+- AC links are now matched from one prebuilt candidate list. If a safe match is not found, the app leaves the ad link blank instead of hanging or assigning a wrong property.
+- Reduced request/browser scrape timeouts so scrape failures return control instead of running for many minutes.
+- Kept TW active-row preservation from v11, meaning TW rows should not be removed only because a View Ad link failed to parse.
+- No Zillow/Redfin estimate scraping was added. Estimate columns remain removed unless a real data API is later provided.
+
+Important:
+- This build prioritizes app responsiveness and safe links over risky slow link resolution.

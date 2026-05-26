@@ -1,0 +1,12 @@
+AuctionAI v10 changes:
+- Fixed TW over-filtering from v9. TW rows are no longer all removed just because link text is not parsed; definite gray/struck/cancelled rows are removed.
+- Removed the extra TW hard filter in normalization that deleted TW rows with general/missing links.
+- Blocked city save now preserves current filters and reruns cleanly.
+- Zillow/Redfin links show by default.
+- Redfin link now uses a targeted Redfin/Google property search fallback instead of redfin.com homepage.
+- Zestimate and Redfin estimate display removed completely until a real API is provided.
+- Hide button column widened so “Hide” stays on one line.
+- Comp/Rehab/Profit keep the row layout but show blank instead of 0; calculations still treat blanks as 0.
+- Look dropdown options changed to blank, Y, N, YY, Soso.
+- Added Save Default Layout button for filters, source selections, link visibility, and width sliders.
+- Browser close now uses heartbeat shutdown so normal Streamlit refresh does not immediately kill the app, but closing the tab should terminate the local process shortly after.

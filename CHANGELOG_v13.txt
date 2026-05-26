@@ -1,0 +1,15 @@
+AuctionAI v13 - portable fast launcher patch
+
+Changes:
+- START_VISIBLE.bat no longer force-reinstalls packages every launch.
+- Creates/checks .venv on first run for each computer.
+- Installs Python packages only when .setup_complete is missing or imports fail.
+- Installs Playwright Chromium only once per local setup marker.
+- RESET_ENVIRONMENT.bat now removes .setup_complete and .playwright_complete too.
+- Disabled automatic full scrape on app launch so the app opens from cache quickly.
+- User must manually scrape/refresh selected sources from the sidebar.
+
+Purpose:
+- New computer: setup still works.
+- Same computer: launch should be much faster.
+- Moving ZIP/folder: run START_VISIBLE.bat and it will build local setup if needed.

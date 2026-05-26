@@ -1,0 +1,4 @@
+- Moved Python virtual environment and Playwright browser storage outside the app folder to %LOCALAPPDATA%\AuctionAI.
+- Added reset and old-local-env cleanup launchers.
+- Fixed TypeError in normalize.py when joining raw row values containing float/NaN values.
+- Kept TW row-preservation behavior from final TW build.

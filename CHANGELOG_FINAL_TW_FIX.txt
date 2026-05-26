@@ -1,0 +1,6 @@
+Final TW fix:
+- Added TW visible-text fallback parser so TW does not return 0 rows when the page is not parsed as normal table rows.
+- Removed missing View Ad as a hard cancellation rule.
+- Kept gray/cancelled detection only in real HTML table rows where styling is available.
+- TW URL set to https://www.tidewaterauctions.com/upcoming-real-estate-auctions
+- Verified fallback parser against current TW text structure: sample produced active TW rows.

@@ -1,0 +1,19 @@
+AuctionAI v11 REAL TW/LINK/FILTER PATCH
+
+Changes:
+- TW parser no longer deletes all TW rows just because View Ad parsing is missing.
+- TW cancelled detection now targets explicit cancelled/postponed/withdrawn text, strike tags, or gray/no-View-Ad rows.
+- TW row parsing is more flexible for shifted table columns.
+- Blocked city save now force-restores exact filter session values after rerun.
+- Hide button width increased so "Hide" stays on one line.
+- AC ad link matching made safer so it will return blank instead of a wrong property link when exact row/card link cannot be verified.
+- Zillow/Redfin links remain shown by default.
+- Zestimate/Redfin estimate display remains removed.
+- Comp/Rehab/Profit stay as the same input boxes, but blank instead of 0.
+
+Validation performed in sandbox:
+- Python files compile successfully.
+- Synthetic TW rows tested: active with View Ad kept, gray/no View Ad cancelled row removed, active no-link row kept.
+
+Limitations:
+- I cannot live-scrape Tidewater/Alex Cooper from this sandbox environment, so site-specific live HTML may still require one more adjustment if their markup differs from the stored assumptions.
