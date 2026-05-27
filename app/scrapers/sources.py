@@ -292,199 +292,140 @@ def date_from_heading(txt):
     m = re.search(r"\b\d{1,2}/\d{1,2}/\d{2,4}\b", txt)
     return m.group(0) if m else ""
 
-
-def ensure_playwright_chromium():
-    """Best-effort Chromium install for Streamlit Cloud AC scraping."""
+def _ensure_playwright_chromium():
+    """Best-effort browser install for Streamlit Cloud. Safe locally."""
     if sync_playwright is None:
         return False
-    marker = Path(".playwright_chromium_installed")
-    if marker.exists():
-        return True
     try:
-        subprocess.run([sys.executable, "-m", "playwright", "install", "chromium"], check=False, timeout=180)
-        marker.write_text("ok", encoding="utf-8")
+        subprocess.run(
+            [sys.executable, "-m", "playwright", "install", "chromium"],
+            check=False,
+            timeout=180,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
     except Exception:
         pass
     return True
 
 
-def _ac_date_from_parts(line, fallback_year=None):
-    """Handle AC date formats like 'TUESDAY | MAY 26, 2026'."""
-    d = date_from_heading(line)
-    if d:
-        return d
-    m = re.search(r"\b(JANUARY|FEBRUARY|MARCH|APRIL|MAY|JUNE|JULY|AUGUST|SEPTEMBER|OCTOBER|NOVEMBER|DECEMBER)\s+(\d{1,2})\b", line, re.I)
-    if m:
-        yr = fallback_year or str(datetime.now().year)
-        return f"{MONTHS[m.group(1).upper()]}/{int(m.group(2)):02d}/{yr}"
-    return ""
+def _ac_parse_visible_text(text, html=""):
+    """Parse the exact AC visible-text format that works in the local app.
 
-def _parse_ac_lines(text, html=""):
-    """Parse Alex Cooper foreclosure text into auction rows.
-
-    The AC page is JavaScript-rendered, but once rendered the visible text is
-    reliable. The old version used a 6-line look-ahead window. That created a
-    nasty bug: the last sale in one county could absorb the first sale in the
-    next county and keep the wrong county. This version builds one bounded sale
-    block at a time and stops at date/county/location/next-time boundaries.
+    This intentionally avoids broad DOM guessing. AC active rows are the lines
+    that contain a sale time, deposit, and VIEW AD. Cancelled/no-ad rows are skipped.
     """
     lines = [clean_text(x) for x in str(text or "").splitlines() if clean_text(x)]
     link_candidates = build_link_candidates(html or "", URLS["AC"])
-    county_lookup = {c.lower().replace("'", ""): c for c in COUNTIES}
-    rows = []
+    county_set = {c.lower(): c for c in COUNTIES}
     current_date = ""
     current_county = ""
-    fallback_year = str(datetime.now().year)
+    rows = []
 
-    def county_from_line(x: str) -> str:
-        return county_lookup.get(clean_text(x).lower().replace("'", ""), "")
-
-    def is_boundary(x: str) -> bool:
-        if not x:
-            return True
-        if _ac_date_from_parts(x, fallback_year=fallback_year):
-            return True
-        if county_from_line(x):
-            return True
-        if x.upper().startswith("LOCATION:"):
-            return True
-        if re.search(r"\b\d{1,2}:\d{2}\s*(?:am|pm)\b", x, re.I):
-            return True
-        return False
-
-    row_pat = re.compile(
-        r"(?P<time>\d{1,2}:\d{2}\s*(?:am|pm))\s+"
-        r"(?P<address>.+?)\s+Dep\.?\s+(?:\$?(?P<amount>[0-9][0-9,]*)|(?P<seead>SEE\s+AD))"
-        r"(?P<tail>.*)$",
-        re.I
-    )
-
-    i = 0
-    while i < len(lines):
-        line = lines[i]
-
-        d = _ac_date_from_parts(line, fallback_year=fallback_year)
-        if d:
-            current_date = d
-            y = re.search(r"\b(20\d{2})\b", line)
-            if y:
-                fallback_year = y.group(1)
-            i += 1
+    for line in lines:
+        # Date header example: "TUESDAY | MAY 26, 2026"
+        if re.search(r"\b(MONDAY|TUESDAY|WEDNESDAY|THURSDAY|FRIDAY|SATURDAY|SUNDAY)\b", line, re.I):
+            d = date_from_heading(line)
+            if d:
+                current_date = d
             continue
 
-        c = county_from_line(line)
-        if c:
-            current_county = c
-            i += 1
+        county_key = line.lower()
+        if county_key in county_set:
+            current_county = county_set[county_key]
             continue
 
-        if not re.search(r"\b\d{1,2}:\d{2}\s*(?:am|pm)\b", line, re.I):
-            i += 1
+        if line.upper().startswith("LOCATION:"):
             continue
 
-        # Build exactly one sale block. Append continuation lines only until the
-        # next row/date/county/location. This preserves the correct county.
-        parts = [line]
-        j = i + 1
-        while j < len(lines) and not is_boundary(lines[j]):
-            parts.append(lines[j])
-            # Stop once we have the ad marker; later text belongs to the page, not the row.
-            if "VIEW AD" in lines[j].upper():
-                j += 1
-                break
-            j += 1
-        block = clean_text(" ".join(parts))
-
-        m = row_pat.search(block)
+        # AC row example:
+        # 11:09 am 5604 Ramblewood Avenue, Clinton, 20735 Dep. $39,000 APL MAP VIEW AD
+        m = re.match(
+            r"^(\d{1,2}:\d{2}\s*(?:am|pm)|\d{1,2}\s*(?:am|pm))\s+(.+?)\s+Dep\.?\s+(?:\$?([0-9][0-9,]*)|SEE\s+AD)(.*)$",
+            line,
+            re.I,
+        )
         if not m:
-            i = max(j, i + 1)
             continue
 
-        full = clean_text(m.group(0))
-        tail = clean_text(m.group("tail"))
-        if is_cancelled_text(full):
-            i = max(j, i + 1)
+        if is_cancelled_text(line) or "VIEW AD" not in line.upper():
             continue
 
-        # AC cancelled/postponed rows usually lose VIEW AD. Keep this strict so
-        # stale/cancelled rows do not enter the grid.
-        if "VIEW AD" not in full.upper():
-            i = max(j, i + 1)
-            continue
-
-        address = clean_text(m.group("address"))
-        address = re.sub(r"\b(APL|MWC|MTG|RA|RMG|FV|DIH|MAP|VIEW AD)\b.*$", "", address, flags=re.I).strip(" ,")
-        if not address or not re.search(r"\d", address):
-            i = max(j, i + 1)
-            continue
-
+        sale_time = m.group(1).upper()
+        address = clean_text(m.group(2))
+        amount = m.group(3)
+        tail = m.group(4) or ""
         pct = re.search(r"increased\s+to\s+(\d+(?:\.\d+)?)\s*%", tail, re.I)
-        deposit = 'SEE AD' if m.group('seead') else (f"${m.group('amount')} → {pct.group(1)}%" if pct else f"${m.group('amount')}")
+        if amount:
+            deposit = f"${amount} → {pct.group(1)}%" if pct else f"${amount}"
+        else:
+            deposit = "SEE AD"
 
         rows.append({
             "source": "AC",
             "auctioneer": "AC",
             "sale date": current_date,
-            "sale time": m.group("time").upper(),
+            "sale time": sale_time,
             "county": current_county,
             "address": address,
             "deposit": deposit,
             "status": "Active",
-            "ad link": best_link_from_candidates(link_candidates, address)
+            "ad link": best_link_from_candidates(link_candidates, address),
         })
-        i = max(j, i + 1)
 
     return dedupe(rows)
 
-def parse_ac():
-    """Robust AC parser.
 
-    AC is rendered by JavaScript. The earlier parser returned 0 when rows were split
-    differently or when the page needed more render time. This version:
-    1. waits longer for browser rendering,
-    2. falls back to requests/BeautifulSoup text,
-    3. parses both one-line and split-line AC row layouts.
-    """
+def parse_ac():
+    """Scrape AC only. Keeps local working logic, with Streamlit Cloud browser support."""
     text = ""
     html = ""
 
     if sync_playwright is not None:
-        ensure_playwright_chromium()
+        _ensure_playwright_chromium()
+        browser = None
         try:
             with sync_playwright() as p:
-                browser = p.chromium.launch(headless=True, args=["--no-sandbox", "--disable-dev-shm-usage"])
-                page = browser.new_page(viewport={"width": 1800, "height": 4200})
+                browser = p.chromium.launch(
+                    headless=True,
+                    args=["--no-sandbox", "--disable-dev-shm-usage"],
+                )
+                page = browser.new_page(viewport={"width": 1700, "height": 3000})
                 page.goto(URLS["AC"], wait_until="domcontentloaded", timeout=45000)
+                # Wait for AC's JS-rendered foreclosure list, but do not hang forever.
                 try:
-                    page.wait_for_load_state("networkidle", timeout=15000)
+                    page.wait_for_selector("text=Foreclosures", timeout=12000)
                 except Exception:
                     pass
-                page.wait_for_timeout(5000)
+                try:
+                    page.wait_for_selector("text=VIEW AD", timeout=12000)
+                except Exception:
+                    pass
+                page.wait_for_timeout(2500)
                 text = page.locator("body").inner_text(timeout=15000)
                 html = page.content()
                 browser.close()
-        except Exception:
+        except Exception as e:
             try:
-                browser.close()
+                if browser:
+                    browser.close()
+            except Exception:
+                pass
+            # Leave a debug file so the app does not silently fail.
+            try:
+                Path("ac_last_error.txt").write_text(str(e), encoding="utf-8")
             except Exception:
                 pass
 
-    # Fallback. Sometimes the visible text is enough even without browser rendering.
-    if not text or len(text) < 500:
-        try:
-            html = fetch(URLS["AC"])
-            text = BeautifulSoup(html, "html.parser").get_text("\n")
-        except Exception:
-            pass
-
+    # Save exactly what Streamlit Cloud rendered. This is the first file to inspect
+    # if AC changes the page again.
     try:
         Path("ac_last_rendered_text.txt").write_text(text or "", encoding="utf-8")
         Path("ac_last_rendered_html.html").write_text(html or "", encoding="utf-8")
     except Exception:
         pass
 
-    return _parse_ac_lines(text, html)
-
+    return _ac_parse_visible_text(text, html)
 
 def parse_tw_text_fallback(soup):
     """Parse Tidewater from the visible text when the site is not real <tr> rows.

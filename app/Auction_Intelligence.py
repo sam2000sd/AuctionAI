@@ -4,11 +4,6 @@ from __future__ import annotations
 from datetime import datetime
 from io import BytesIO
 from pathlib import Path
-import sys
-
-ROOT_DIR = Path(__file__).resolve().parents[1]
-if str(ROOT_DIR) not in sys.path:
-    sys.path.insert(0, str(ROOT_DIR))
 import os
 import threading
 from http.server import BaseHTTPRequestHandler, HTTPServer
@@ -25,153 +20,6 @@ from app.scrapers.sources import scrape_many, clear_cache
 from app.storage.local import load_bids, save_bids, merge_bids, load_hidden, hide_address, clear_hidden, load_blocked_cities, save_blocked_cities, load_layout_defaults, save_layout_defaults
 
 st.set_page_config(page_title="Auction Intelligence", page_icon="🏛️", layout="wide")
-
-
-st.markdown("""
-<style>
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
-
-html, body, [class*="css"] { font-family: 'Inter', sans-serif; }
-
-.stApp {
-    background:
-        radial-gradient(circle at top left, rgba(239, 68, 68, 0.08), transparent 32%),
-        linear-gradient(180deg, #f8fafc 0%, #eef2f7 100%);
-    color: #0f172a;
-}
-
-.block-container {
-    padding-top: 1.6rem !important;
-    padding-left: 1.7rem !important;
-    padding-right: 1.7rem !important;
-    max-width: none !important;
-}
-
-[data-testid="stSidebar"] {
-    background: linear-gradient(180deg, #0f172a 0%, #111827 100%);
-    border-right: 1px solid rgba(148, 163, 184, 0.25);
-}
-
-[data-testid="stSidebar"] * { color: #e5e7eb !important; }
-
-[data-testid="stSidebar"] label,
-[data-testid="stSidebar"] p,
-[data-testid="stSidebar"] span { color: #cbd5e1 !important; }
-
-[data-testid="stSidebar"] input,
-[data-testid="stSidebar"] textarea,
-.stNumberInput input,
-.stTextInput input {
-    color: #0f172a !important;
-    -webkit-text-fill-color: #0f172a !important;
-    font-weight: 600 !important;
-}
-
-[data-testid="stSidebar"] input::placeholder,
-[data-testid="stSidebar"] textarea::placeholder {
-    color: #64748b !important;
-    opacity: .75 !important;
-}
-
-[data-testid="stSidebar"] .stButton button {
-    background: rgba(255,255,255,0.08);
-    color: #f8fafc !important;
-    border: 1px solid rgba(148, 163, 184, 0.35);
-    border-radius: 12px;
-    height: 42px;
-    font-weight: 600;
-}
-
-[data-testid="stSidebar"] .stButton button:hover {
-    background: rgba(239, 68, 68, 0.22);
-    border-color: #ef4444;
-}
-
-.stButton button[kind="primary"], button[kind="primary"] {
-    background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%) !important;
-    border: 0 !important;
-    color: white !important;
-    border-radius: 12px !important;
-    font-weight: 700 !important;
-    box-shadow: 0 8px 18px rgba(239, 68, 68, 0.25);
-}
-
-.stButton button { border-radius: 12px !important; font-weight: 600 !important; }
-
-h1 {
-    font-size: 2.45rem !important;
-    font-weight: 800 !important;
-    letter-spacing: -0.04em;
-    margin-bottom: 0.2rem !important;
-}
-
-h2, h3 { font-weight: 750 !important; letter-spacing: -0.03em; }
-
-[data-testid="stMetric"] {
-    background: rgba(255, 255, 255, 0.82);
-    border: 1px solid rgba(148, 163, 184, 0.25);
-    padding: 16px 18px;
-    border-radius: 18px;
-    box-shadow: 0 10px 28px rgba(15, 23, 42, 0.06);
-}
-
-[data-testid="stMetricLabel"] { color: #64748b !important; font-weight: 700; }
-[data-testid="stMetricValue"] { color: #0f172a !important; font-weight: 800; }
-
-div[data-baseweb="select"] > div, input, textarea {
-    border-radius: 12px !important;
-    border-color: rgba(148, 163, 184, 0.45) !important;
-}
-
-div[data-testid="stDataFrame"], div[data-testid="stDataEditor"] {
-    border-radius: 16px;
-    overflow: hidden;
-    border: 1px solid rgba(148, 163, 184, 0.35);
-    box-shadow: 0 18px 40px rgba(15, 23, 42, 0.08);
-    background: white;
-}
-
-div[data-testid="stDataFrame"] [role="columnheader"],
-div[data-testid="stDataEditor"] [role="columnheader"] {
-    background: #f1f5f9 !important;
-    color: #334155 !important;
-    font-weight: 800 !important;
-}
-
-div[data-testid="stDataFrame"] [role="gridcell"],
-div[data-testid="stDataEditor"] [role="gridcell"] { font-size: 12.5px !important; }
-
-.small-muted { color:#64748b; font-size:13px; font-weight: 500; }
-
-.ai-hero {
-    background: linear-gradient(135deg, #0f172a 0%, #1e293b 55%, #991b1b 145%);
-    border-radius: 24px;
-    padding: 28px 30px;
-    margin-bottom: 22px;
-    color: white;
-    box-shadow: 0 22px 55px rgba(15, 23, 42, 0.22);
-}
-
-.ai-hero h1 { color: white !important; margin: 0 !important; }
-.ai-hero p { color: #cbd5e1 !important; margin-top: 8px; margin-bottom: 0; }
-
-.ai-pill {
-    display: inline-block;
-    padding: 6px 11px;
-    margin-bottom: 12px;
-    border-radius: 999px;
-    background: rgba(239, 68, 68, 0.18);
-    color: #fecaca;
-    font-size: 12px;
-    font-weight: 800;
-    letter-spacing: 0.06em;
-    text-transform: uppercase;
-}
-</style>
-""", unsafe_allow_html=True)
-
-
-
 
 st.markdown("""
 <style>
@@ -346,19 +194,12 @@ def build_save_df(df, multiplier, sale_net, close1, close2):
         rows.append(row)
     return pd.DataFrame(rows)
 
-st.markdown("""
-<div class="ai-hero">
-    <div class="ai-pill">Auction Acquisition System</div>
-    <h1>Auction Intelligence</h1>
-    <p>Professional foreclosure auction underwriting board for fast deal review, bid planning, and source tracking.</p>
-</div>
-""", unsafe_allow_html=True)
+st.title("Auction Intelligence")
 st.caption("Clean rebuild. Local Streamlit dashboard for Maryland/DC foreclosure auctions.")
 
 with st.sidebar:
     st.header("Auction Sources")
-    selected = st.multiselect("Sources", ["AC", "TW", "HW", "MWC"], default=default_value("source_filter_sidebar", ["AC", "TW", "HW"]), key="source_filter_sidebar")
-    st.caption("AC uses browser rendering and may return 0 until its parser is hardened for the live page. TW/HW are confirmed working.")
+    selected = st.multiselect("Sources", ["AC", "TW", "HW", "MWC"], default=default_value("source_filter_sidebar", ["AC", "TW", "HW", "MWC"]), key="source_filter_sidebar")
 
     c1, c2 = st.columns(2)
     if c1.button("Scrape AC"):
@@ -379,10 +220,8 @@ with st.sidebar:
     if "last_scrape" in st.session_state:
         st.write("Last scrape:")
         for s, res in st.session_state.last_scrape.items():
-            if res["ok"] and int(res.get("rows", 0)) > 0:
+            if res["ok"]:
                 st.success(f"{s}: {res['rows']} rows")
-            elif res["ok"]:
-                st.warning(f"{s}: 0 rows. The source responded, but the parser found no usable auction rows.")
             else:
                 st.error(f"{s}: {res['error']}")
 
@@ -451,7 +290,7 @@ if not df.empty:
     df["County"] = df["County"].apply(lambda x: x if x in MD_COUNTIES else "Unknown County")
 
 if df.empty:
-    st.warning("No live auction data loaded yet. Select AC, TW, or HW in the sidebar and click a scrape/refresh button. The app starts clean with no bundled stale CSV data.")
+    st.warning("No cached auction data found. Select sources in the sidebar and click a scrape/refresh button. First setup on a new computer installs dependencies once, but scraping is manual so startup stays fast.")
     st.stop()
 
 # focus filters
