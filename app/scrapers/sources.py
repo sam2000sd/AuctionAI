@@ -427,7 +427,7 @@ def parse_ac():
 
     return _ac_parse_visible_text(text, html)
 
-def parse_tw_text_fallback(soup):
+def parse_tw_text_fallback(soup, html=""):
     """Parse Tidewater from the visible text when the site is not real <tr> rows.
 
     TW's current upcoming-sales page can render as a stream of text/blocks.
@@ -438,6 +438,7 @@ def parse_tw_text_fallback(soup):
     lines = [clean_text(x) for x in soup.get_text("\n").splitlines()]
     lines = [x for x in lines if x]
     rows = []
+    link_candidates = build_link_candidates(html or str(soup), URLS["TW"])
     current_date = ""
     current_county = ""
     county_lookup = {c.lower().replace("'", ""): c for c in COUNTIES}
@@ -523,7 +524,7 @@ def parse_tw_text_fallback(soup):
             i = max(scan_end, i + 1)
             continue
 
-        link = ""
+        link = best_link_from_candidates(link_candidates, address)
         rows.append({
             "source": "TW", "auctioneer": "TW", "sale date": current_date, "sale time": sale_time,
             "county": current_county, "address": clean_text(address), "deposit": deposit, "status": "Active",
@@ -589,7 +590,7 @@ def parse_tw():
 
     # Final pass: current TW page text layout. This is the key fix for TW: 0 rows.
     if not rows:
-        rows = parse_tw_text_fallback(soup)
+        rows = parse_tw_text_fallback(soup, html)
 
     return dedupe(rows)
 

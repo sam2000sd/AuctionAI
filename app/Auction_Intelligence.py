@@ -30,17 +30,12 @@ st.set_page_config(page_title="Auction Intelligence", page_icon="🏛️", layou
 
 st.markdown("""
 <style>
-/* Compact grid UI. Keep everything visible on normal laptop screens. */
-.block-container {max-width: 100%; padding-top: .75rem; padding-left: 1.25rem; padding-right: 1.25rem;}
-[data-testid="stHorizontalBlock"] {gap: .35rem;}
-[data-testid="column"] {min-width: 0 !important;}
-.date-header {border-top:5px solid black; background:#f3f4f6; padding:9px 12px; margin-top:20px; font-weight:800;}
+.block-container {max-width: 1900px; padding-top: 1rem;}
+.date-header {border-top:5px solid black; background:#f3f4f6; padding:10px 14px; margin-top:24px; font-weight:800;}
 .small {color:#6b7280; font-size:.85rem;}
-div.stButton > button {white-space: nowrap; min-width: 0 !important; padding-left: .35rem; padding-right: .35rem;}
-div[data-testid="stTextInput"] input {height: 34px; padding-left: .35rem; padding-right: .35rem;}
-div[data-testid="stSelectbox"] div[data-baseweb="select"] > div {min-height: 34px;}
-/* tighter table text */
-[data-testid="stMarkdownContainer"] p {margin-bottom: .15rem;}
+div.stButton > button {white-space: nowrap; min-width: 78px;}
+/* make text inputs used for numeric entry match the compact original row shape */
+div[data-testid="stTextInput"] input {height: 38px;}
 </style>
 """, unsafe_allow_html=True)
 
@@ -124,10 +119,139 @@ def paths():
 def load_data(path_strings, mtimes):
     return normalize_files([Path(p) for p in path_strings])
 
-def excel_bytes(df):
+def clean_external_url(raw, auctioneer=""):
+    """Return a real outside URL only. Prevents Streamlit from opening itself for bad/blank links."""
+    url = str(raw or "").strip()
+    if not url or url.lower() in {"nan", "none", "#"} or url.startswith("javascript:"):
+        return ""
+    if url.startswith("//"):
+        url = "https:" + url
+    if url.startswith("/"):
+        base_by_auctioneer = {
+            "TW": "https://www.tidewaterauctions.com",
+            "AC": "https://realestate.alexcooper.com",
+            "HW": "https://www.hwestauctions.com",
+            "MWC": "https://apps.mwc-law.com",
+        }
+        base = base_by_auctioneer.get(str(auctioneer or "").upper(), "")
+        url = base + url if base else ""
+    low = url.lower()
+    if not (low.startswith("http://") or low.startswith("https://")):
+        return ""
+    # If a bad relative/empty link somehow becomes the Streamlit app URL, suppress it.
+    if "streamlit.app" in low or "localhost:8501" in low or "127.0.0.1:8501" in low:
+        return ""
+    return url
+
+def export_view_df(df):
+    """Flat investor-friendly export. Editable numbers stay in thousands."""
+    out = pd.DataFrame()
+    src = df.copy()
+    dt = pd.to_datetime(src.get("Sale Date & Time"), errors="coerce")
+    try:
+        out["Date/Time"] = dt.dt.strftime("%-m/%-d/%Y %-I:%M %p").fillna("")
+    except Exception:
+        out["Date/Time"] = dt.dt.strftime("%m/%d/%Y %I:%M %p").fillna("")
+    out["Address"] = src.get("Address", "")
+    out["Auct"] = src.get("Auctioneer", "")
+    out["Note"] = src.get("My Note", "")
+    out["Deposit"] = src.get("Deposit", "")
+    out["County"] = src.get("County", "")
+    out["Occupied"] = src.get("Occupied", False)
+    out["Look"] = src.get("Look", "")
+    out["Comp"] = pd.to_numeric(src.get("Comp", 0), errors="coerce").fillna(0)
+    out["Repair"] = pd.to_numeric(src.get("Rehab", 0), errors="coerce").fillna(0)
+    out["Profit"] = pd.to_numeric(src.get("Profit", 0), errors="coerce").fillna(0)
+    out["Max"] = ""
+    out["%"] = ""
+    out["MaxS"] = ""
+    out["Ad"] = [clean_external_url(a, au) for a, au in zip(src.get("Ad Link", ""), src.get("Auctioneer", ""))]
+    return out
+
+def excel_bytes(df, sale_net=0.96, close1=0.06, close2=0.05):
+    """Create a phone-friendly Excel export with live formulas.
+
+    Inputs are in thousands, matching the auction workflow:
+      Comp 700, Repair 100, Profit 100 -> Max = ((700*96%)-100-100)/(1+6%).
+    User can edit Comp/Repair/Profit on the phone and Max/%/MaxS recalculate.
+    """
+    from openpyxl.styles import Font, PatternFill, Border, Side, Alignment
+    from openpyxl.worksheet.table import Table, TableStyleInfo
+    from openpyxl.utils import get_column_letter
+
     bio = BytesIO()
+    export_df = export_view_df(df)
     with pd.ExcelWriter(bio, engine="openpyxl") as writer:
-        df.to_excel(writer, index=False, sheet_name="Auctions")
+        export_df.to_excel(writer, index=False, sheet_name="Auctions")
+        wb = writer.book
+        ws = wb["Auctions"]
+        ws.freeze_panes = "A2"
+
+        # Header styling similar to Sam's auction spreadsheet.
+        header_fill = PatternFill("solid", fgColor="4472C4")
+        header_font = Font(color="FFFFFF", bold=True)
+        thin = Side(style="thin", color="D9E2F3")
+        border = Border(left=thin, right=thin, top=thin, bottom=thin)
+        for cell in ws[1]:
+            cell.fill = header_fill
+            cell.font = header_font
+            cell.border = border
+            cell.alignment = Alignment(horizontal="center", vertical="center")
+
+        # Live formulas. Excel will recalculate when opened/edited.
+        # I=Comp, J=Repair, K=Profit, L=Max, M=%, N=MaxS.
+        for r in range(2, ws.max_row + 1):
+            ws[f"L{r}"] = f'=IF(I{r}>0,((I{r}*{sale_net})-J{r}-K{r})/(1+{close1}),"")'
+            ws[f"M{r}"] = f'=IF(I{r}>0,L{r}/I{r},"")'
+            ws[f"N{r}"] = f'=IF(I{r}>0,((I{r}*{sale_net})-J{r}-K{r})/(1+{close2}),"")'
+
+            # Clickable Ad link without showing a long URL.
+            ad_url = str(ws[f"O{r}"].value or "").strip()
+            if ad_url:
+                ws[f"O{r}"].hyperlink = ad_url
+                ws[f"O{r}"].value = "Ad"
+                ws[f"O{r}"].style = "Hyperlink"
+
+        # Formatting.
+        widths = {
+            "A": 18, "B": 44, "C": 8, "D": 26, "E": 13, "F": 22, "G": 10, "H": 10,
+            "I": 10, "J": 10, "K": 10, "L": 12, "M": 8, "N": 12, "O": 10,
+        }
+        for col, width in widths.items():
+            ws.column_dimensions[col].width = width
+        for row in ws.iter_rows(min_row=2, max_row=ws.max_row):
+            for cell in row:
+                cell.border = border
+                cell.alignment = Alignment(vertical="top", wrap_text=True)
+            for col in ["I", "J", "K", "L", "N"]:
+                ws[f"{col}{row[0].row}"].number_format = '0.########'
+            ws[f"M{row[0].row}"].number_format = '0%'
+
+        # Make it sortable/filterable on phone/desktop.
+        if ws.max_row >= 2:
+            end_col = get_column_letter(ws.max_column)
+            tab = Table(displayName="AuctionExport", ref=f"A1:{end_col}{ws.max_row}")
+            tab.tableStyleInfo = TableStyleInfo(name="TableStyleMedium2", showFirstColumn=False, showLastColumn=False, showRowStripes=True, showColumnStripes=False)
+            ws.add_table(tab)
+
+        # Hidden settings sheet so the assumptions are preserved inside the file.
+        settings = wb.create_sheet("Formula Settings")
+        settings["A1"] = "Sale net"
+        settings["B1"] = sale_net
+        settings["A2"] = "Max closing cost"
+        settings["B2"] = close1
+        settings["A3"] = "MaxS closing cost"
+        settings["B3"] = close2
+        settings["A4"] = "Formula note"
+        settings["B4"] = "Comp, Repair, Profit, Max, and MaxS are in thousands."
+        settings.sheet_state = "hidden"
+
+        # Force recalculation in Excel/mobile apps.
+        try:
+            wb.calculation.fullCalcOnLoad = True
+            wb.calculation.forceFullCalc = True
+        except Exception:
+            pass
     return bio.getvalue()
 
 def safe_key(prefix, aid):
@@ -365,7 +489,7 @@ top1, top2, top3 = st.columns([1,1,4])
 if top1.button("Save Bids", type="primary", use_container_width=True):
     save_bids(pd.concat([load_bids(), visible_save], ignore_index=True).sort_values("Saved At").drop_duplicates("Auction ID", keep="last"))
     st.success("Saved")
-top2.download_button("Export Excel", data=excel_bytes(visible_save), file_name="auction_intelligence.xlsx", use_container_width=True)
+top2.download_button("Export Excel", data=excel_bytes(visible_save, sale_net, close1, close2), file_name="auction_intelligence.xlsx", use_container_width=True)
 
 st.subheader("Main Auction Grid")
 if date_view == "Current auction week":
@@ -376,20 +500,15 @@ filtered["_Date"] = pd.to_datetime(filtered["Sale Date & Time"], errors="coerce"
 
 for d, group in filtered.groupby("_Date", dropna=False):
     st.markdown(f'<div class="date-header">{pd.to_datetime(d).strftime("%A, %B %d, %Y") if pd.notna(d) else "Unknown Date"}</div>', unsafe_allow_html=True)
-    # Compact default widths. Sidebar sliders still control the wide text columns,
-    # but the fixed columns are intentionally tight so the grid does not run off-screen.
-    compact_county_w = min(float(county_w), 0.95)
-    compact_addr_w = min(float(addr_w), 2.25)
-    compact_note_w = min(float(note_w), 1.0)
-    widths = [.72,.45,compact_county_w,compact_addr_w,.72,.32,.50,.62,.62,.62,.72,.42,.72,compact_note_w,.32]
-    headers = ["Time","Auct","County","Address","Dep","Occ","Look","Comp","Rehab","Profit","Max","%","MaxS","Note","Ad"]
+    widths = [.7,.5,county_w,addr_w,.8,.45,.75,.8,.8,.8,.9,.6,.9,note_w,.45]
+    headers = ["Time","Auct","County","Address","Deposit","Occ","Look","Comp","Rehab","Profit","Max","%","MaxS","Note","Ad"]
     if show_ai:
         widths += [.8,.8]
         headers += ["AI ARV","AI Max"]
     if show_links:
-        widths += [.55]
+        widths += [.8]
         headers += ["Links"]
-    widths += [.45]
+    widths += [1.35]
     headers += ["Hide"]
     cols = st.columns(widths)
     for c, h in zip(cols, headers):
@@ -423,8 +542,8 @@ for d, group in filtered.groupby("_Date", dropna=False):
         cols[11].write(pct(bidpct))
         cols[12].write(money(maxs))
         cols[13].text_input("Note", key=safe_key("note", aid), label_visibility="collapsed")
-        link = str(r.get("Ad Link",""))
-        cols[14].markdown(f"[Ad]({link})" if link else "")
+        link = clean_external_url(r.get("Ad Link", ""), r.get("Auctioneer", ""))
+        cols[14].markdown(f'<a href="{link}" target="_blank" rel="noopener noreferrer">Ad</a>' if link else "", unsafe_allow_html=True)
         idx = 15
         if show_ai:
             # Starter AI: use current comp as AI ARV, and current calculated max as AI Max.
@@ -433,9 +552,9 @@ for d, group in filtered.groupby("_Date", dropna=False):
             idx += 2
         if show_links:
             addr = r["Address"]
-            cols[idx].markdown(f"[Z]({zillow_link(addr)}) / [R]({redfin_search_link(addr)})")
+            cols[idx].markdown(f'<a href="{zillow_link(addr)}" target="_blank" rel="noopener noreferrer">Z</a> / <a href="{redfin_search_link(addr)}" target="_blank" rel="noopener noreferrer">R</a>', unsafe_allow_html=True)
             idx += 1
-        if cols[idx].button("×", key=safe_key("hide", aid), use_container_width=True, help="Hide this property"):
+        if cols[idx].button("Hide", key=safe_key("hide", aid), use_container_width=True):
             hide_address(r["Address"])
             st.rerun()
 
