@@ -30,12 +30,41 @@ st.set_page_config(page_title="Auction Intelligence", page_icon="🏛️", layou
 
 st.markdown("""
 <style>
-.block-container {max-width: 1900px; padding-top: 1rem;}
-.date-header {border-top:5px solid black; background:#f3f4f6; padding:10px 14px; margin-top:24px; font-weight:800;}
-.small {color:#6b7280; font-size:.85rem;}
-div.stButton > button {white-space: nowrap; min-width: 78px;}
-/* make text inputs used for numeric entry match the compact original row shape */
-div[data-testid="stTextInput"] input {height: 38px;}
+:root {
+  --ai-bg: #f6f8fb;
+  --ai-card: #ffffff;
+  --ai-ink: #172033;
+  --ai-muted: #667085;
+  --ai-red: #ff4b4b;
+  --ai-blue: #2563eb;
+  --ai-border: #d9e2ef;
+}
+html, body, [data-testid="stAppViewContainer"] {
+  background: linear-gradient(180deg, #f7faff 0%, #eef3f9 100%) !important;
+  color: var(--ai-ink);
+}
+.block-container {max-width: 1900px; padding-top: 1.25rem; padding-left: 1.5rem; padding-right: 1.5rem;}
+[data-testid="stSidebar"] {background: linear-gradient(180deg, #111827 0%, #1f2937 100%) !important;}
+[data-testid="stSidebar"] * {color: #f8fafc;}
+[data-testid="stSidebar"] .stMultiSelect div[data-baseweb="select"] > div,
+[data-testid="stSidebar"] textarea,
+[data-testid="stSidebar"] input {background: #ffffff !important; color: #111827 !important; border-radius: 10px;}
+[data-testid="stSidebar"] label, [data-testid="stSidebar"] .stMarkdown p {color: #dbeafe !important;}
+[data-testid="stSidebar"] hr {border-color: rgba(255,255,255,.14);}
+h1 {letter-spacing: -0.03em; color:#111827;}
+h2, h3 {color:#172033;}
+.date-header {border-top:4px solid #111827; background:linear-gradient(90deg,#eaf1ff 0%,#f7f9fc 100%); padding:11px 14px; margin-top:24px; font-weight:800; border-radius: 12px 12px 0 0; box-shadow: 0 1px 0 rgba(17,24,39,.08);}
+.small {color:var(--ai-muted); font-size:.85rem;}
+div.stButton > button {white-space: nowrap; min-width: 78px; border-radius:10px; border:1px solid #cbd5e1; font-weight:650;}
+div.stButton > button[kind="primary"], div.stDownloadButton > button {background: linear-gradient(135deg,#ff4b4b,#ef4444) !important; color:#fff !important; border:0 !important; border-radius:10px; font-weight:750; box-shadow:0 8px 18px rgba(239,68,68,.18);}
+div.stDownloadButton > button:hover, div.stButton > button[kind="primary"]:hover {filter:brightness(.97); transform: translateY(-1px);}
+div[data-testid="stHorizontalBlock"] {align-items: start;}
+div[data-testid="stTextInput"] input {height: 38px; border-radius:10px; background:#f1f5f9; border:1px solid transparent;}
+div[data-testid="stTextInput"] input:focus {background:#fff; border-color:#93c5fd; box-shadow:0 0 0 2px rgba(37,99,235,.10);}
+div[data-baseweb="select"] > div {border-radius:10px; background:#f1f5f9; border-color:transparent;}
+.stAlert {border-radius: 12px;}
+a {color:#1d4ed8; font-weight:650; text-decoration:none;}
+a:hover {text-decoration:underline;}
 </style>
 """, unsafe_allow_html=True)
 
@@ -201,9 +230,9 @@ def excel_bytes(df, sale_net=0.96, close1=0.06, close2=0.05):
         # Live formulas. Excel will recalculate when opened/edited.
         # I=Comp, J=Repair, K=Profit, L=Max, M=%, N=MaxS.
         for r in range(2, ws.max_row + 1):
-            ws[f"L{r}"] = f'=IF(I{r}>0,((I{r}*{sale_net})-J{r}-K{r})/(1+{close1}),"")'
-            ws[f"M{r}"] = f'=IF(I{r}>0,L{r}/I{r},"")'
-            ws[f"N{r}"] = f'=IF(I{r}>0,((I{r}*{sale_net})-J{r}-K{r})/(1+{close2}),"")'
+            ws[f"L{r}"] = f'=IF(I{r}>0,(((I{r}*{sale_net})-J{r}-K{r})/(1+{close1}))*1000,"")'
+            ws[f"M{r}"] = f'=IF(I{r}>0,L{r}/(I{r}*1000),"")'
+            ws[f"N{r}"] = f'=IF(I{r}>0,(((I{r}*{sale_net})-J{r}-K{r})/(1+{close2}))*1000,"")'
 
             # Clickable Ad link without showing a long URL.
             ad_url = str(ws[f"O{r}"].value or "").strip()
@@ -224,7 +253,7 @@ def excel_bytes(df, sale_net=0.96, close1=0.06, close2=0.05):
                 cell.border = border
                 cell.alignment = Alignment(vertical="top", wrap_text=True)
             for col in ["I", "J", "K", "L", "N"]:
-                ws[f"{col}{row[0].row}"].number_format = '0.########'
+                ws[f"{col}{row[0].row}"].number_format = '$#,##0'
             ws[f"M{row[0].row}"].number_format = '0%'
 
         # Make it sortable/filterable on phone/desktop.
@@ -243,7 +272,7 @@ def excel_bytes(df, sale_net=0.96, close1=0.06, close2=0.05):
         settings["A3"] = "MaxS closing cost"
         settings["B3"] = close2
         settings["A4"] = "Formula note"
-        settings["B4"] = "Comp, Repair, Profit, Max, and MaxS are in thousands."
+        settings["B4"] = "Comp, Repair, and Profit are entered in thousands. Max and MaxS display as full dollar values."
         settings.sheet_state = "hidden"
 
         # Force recalculation in Excel/mobile apps.
