@@ -5,12 +5,19 @@ from datetime import datetime
 from io import BytesIO
 from pathlib import Path
 import os
+import sys
 import threading
 from http.server import BaseHTTPRequestHandler, HTTPServer
 
 import pandas as pd
 import streamlit as st
 import streamlit.components.v1 as components
+
+# Streamlit Cloud runs this file from inside /app, so add the repo root
+# to Python path before importing app.core/app.scrapers modules.
+ROOT_DIR = Path(__file__).resolve().parents[1]
+if str(ROOT_DIR) not in sys.path:
+    sys.path.insert(0, str(ROOT_DIR))
 
 from app.core.config import SCRAPED_DIR, EXPORT_DIR
 from app.core.normalize import normalize_files
