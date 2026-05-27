@@ -31,37 +31,85 @@ st.set_page_config(page_title="Auction Intelligence", page_icon="🏛️", layou
 st.markdown("""
 <style>
 :root {
-  --ai-bg: #f6f8fb;
+  --ai-bg: #f4f7fb;
+  --ai-panel: #ffffff;
   --ai-card: #ffffff;
-  --ai-ink: #172033;
-  --ai-muted: #667085;
+  --ai-ink: #111827;
+  --ai-muted: #5b6678;
   --ai-red: #ff4b4b;
   --ai-blue: #2563eb;
-  --ai-border: #d9e2ef;
+  --ai-border: #d7e0ec;
+  --ai-sidebar: #111827;
+  --ai-sidebar-2: #1e293b;
+  --ai-sidebar-field: #243244;
 }
 html, body, [data-testid="stAppViewContainer"] {
-  background: linear-gradient(180deg, #f7faff 0%, #eef3f9 100%) !important;
+  background: linear-gradient(180deg, #f8fbff 0%, #eef4fb 100%) !important;
   color: var(--ai-ink);
 }
 .block-container {max-width: 1900px; padding-top: 1.25rem; padding-left: 1.5rem; padding-right: 1.5rem;}
-[data-testid="stSidebar"] {background: linear-gradient(180deg, #111827 0%, #1f2937 100%) !important;}
-[data-testid="stSidebar"] * {color: #f8fafc;}
-[data-testid="stSidebar"] .stMultiSelect div[data-baseweb="select"] > div,
-[data-testid="stSidebar"] textarea,
-[data-testid="stSidebar"] input {background: #ffffff !important; color: #111827 !important; border-radius: 10px;}
-[data-testid="stSidebar"] label, [data-testid="stSidebar"] .stMarkdown p {color: #dbeafe !important;}
+
+/* Dark modern sidebar */
+[data-testid="stSidebar"] {background: linear-gradient(180deg, var(--ai-sidebar) 0%, var(--ai-sidebar-2) 100%) !important;}
+[data-testid="stSidebar"] h1, [data-testid="stSidebar"] h2, [data-testid="stSidebar"] h3,
+[data-testid="stSidebar"] label, [data-testid="stSidebar"] p, [data-testid="stSidebar"] span {color: #f8fafc !important;}
+[data-testid="stSidebar"] .small, [data-testid="stSidebar"] .stMarkdown p {color: #cbd5e1 !important;}
 [data-testid="stSidebar"] hr {border-color: rgba(255,255,255,.14);}
+[data-testid="stSidebar"] div[data-baseweb="select"] > div,
+[data-testid="stSidebar"] textarea,
+[data-testid="stSidebar"] input {
+  background: var(--ai-sidebar-field) !important;
+  color: #f8fafc !important;
+  border: 1px solid rgba(255,255,255,.16) !important;
+  border-radius: 11px !important;
+}
+[data-testid="stSidebar"] textarea::placeholder,
+[data-testid="stSidebar"] input::placeholder {color: #94a3b8 !important;}
+[data-testid="stSidebar"] div[data-baseweb="select"] svg {fill: #e5e7eb !important;}
+[data-testid="stSidebar"] div.stButton > button {
+  background: #243244 !important;
+  color: #f8fafc !important;
+  border: 1px solid rgba(255,255,255,.20) !important;
+  border-radius: 11px !important;
+  font-weight: 700 !important;
+}
+[data-testid="stSidebar"] div.stButton > button:hover {
+  background: #334155 !important;
+  border-color: rgba(255,255,255,.34) !important;
+}
+[data-testid="stSidebar"] div.stButton > button[kind="primary"] {
+  background: linear-gradient(135deg,#ff4b4b,#ef4444) !important;
+  color: #ffffff !important;
+  border: 0 !important;
+}
+
+/* Main area */
 h1 {letter-spacing: -0.03em; color:#111827;}
 h2, h3 {color:#172033;}
-.date-header {border-top:4px solid #111827; background:linear-gradient(90deg,#eaf1ff 0%,#f7f9fc 100%); padding:11px 14px; margin-top:24px; font-weight:800; border-radius: 12px 12px 0 0; box-shadow: 0 1px 0 rgba(17,24,39,.08);}
+.date-header {border-top:4px solid #111827; background:linear-gradient(90deg,#e8f1ff 0%,#ffffff 100%); padding:11px 14px; margin-top:24px; font-weight:800; border-radius: 12px 12px 0 0; box-shadow: 0 1px 0 rgba(17,24,39,.08);}
 .small {color:var(--ai-muted); font-size:.85rem;}
-div.stButton > button {white-space: nowrap; min-width: 78px; border-radius:10px; border:1px solid #cbd5e1; font-weight:650;}
-div.stButton > button[kind="primary"], div.stDownloadButton > button {background: linear-gradient(135deg,#ff4b4b,#ef4444) !important; color:#fff !important; border:0 !important; border-radius:10px; font-weight:750; box-shadow:0 8px 18px rgba(239,68,68,.18);}
+
+/* Main inputs, cleaner and less gray */
+div[data-testid="stTextInput"] input,
+div[data-testid="stNumberInput"] input,
+div[data-baseweb="select"] > div {
+  background: #ffffff !important;
+  border: 1px solid var(--ai-border) !important;
+  border-radius: 11px !important;
+  box-shadow: 0 1px 2px rgba(16,24,40,.04) !important;
+}
+div[data-testid="stTextInput"] input:focus,
+div[data-testid="stNumberInput"] input:focus {
+  background:#ffffff !important;
+  border-color:#93c5fd !important;
+  box-shadow:0 0 0 3px rgba(37,99,235,.11) !important;
+}
+
+/* Buttons */
+div.stButton > button {white-space: nowrap; min-width: 78px; border-radius:11px; border:1px solid #cbd5e1; font-weight:650; color:#111827; background:#ffffff;}
+div.stButton > button[kind="primary"], div.stDownloadButton > button {background: linear-gradient(135deg,#ff4b4b,#ef4444) !important; color:#fff !important; border:0 !important; border-radius:11px; font-weight:750; box-shadow:0 8px 18px rgba(239,68,68,.18);}
 div.stDownloadButton > button:hover, div.stButton > button[kind="primary"]:hover {filter:brightness(.97); transform: translateY(-1px);}
 div[data-testid="stHorizontalBlock"] {align-items: start;}
-div[data-testid="stTextInput"] input {height: 38px; border-radius:10px; background:#f1f5f9; border:1px solid transparent;}
-div[data-testid="stTextInput"] input:focus {background:#fff; border-color:#93c5fd; box-shadow:0 0 0 2px rgba(37,99,235,.10);}
-div[data-baseweb="select"] > div {border-radius:10px; background:#f1f5f9; border-color:transparent;}
 .stAlert {border-radius: 12px;}
 a {color:#1d4ed8; font-weight:650; text-decoration:none;}
 a:hover {text-decoration:underline;}
