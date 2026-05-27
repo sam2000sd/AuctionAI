@@ -30,12 +30,17 @@ st.set_page_config(page_title="Auction Intelligence", page_icon="🏛️", layou
 
 st.markdown("""
 <style>
-.block-container {max-width: 1900px; padding-top: 1rem;}
-.date-header {border-top:5px solid black; background:#f3f4f6; padding:10px 14px; margin-top:24px; font-weight:800;}
+/* Compact grid UI. Keep everything visible on normal laptop screens. */
+.block-container {max-width: 100%; padding-top: .75rem; padding-left: 1.25rem; padding-right: 1.25rem;}
+[data-testid="stHorizontalBlock"] {gap: .35rem;}
+[data-testid="column"] {min-width: 0 !important;}
+.date-header {border-top:5px solid black; background:#f3f4f6; padding:9px 12px; margin-top:20px; font-weight:800;}
 .small {color:#6b7280; font-size:.85rem;}
-div.stButton > button {white-space: nowrap; min-width: 78px;}
-/* make text inputs used for numeric entry match the compact original row shape */
-div[data-testid="stTextInput"] input {height: 38px;}
+div.stButton > button {white-space: nowrap; min-width: 0 !important; padding-left: .35rem; padding-right: .35rem;}
+div[data-testid="stTextInput"] input {height: 34px; padding-left: .35rem; padding-right: .35rem;}
+div[data-testid="stSelectbox"] div[data-baseweb="select"] > div {min-height: 34px;}
+/* tighter table text */
+[data-testid="stMarkdownContainer"] p {margin-bottom: .15rem;}
 </style>
 """, unsafe_allow_html=True)
 
@@ -371,15 +376,20 @@ filtered["_Date"] = pd.to_datetime(filtered["Sale Date & Time"], errors="coerce"
 
 for d, group in filtered.groupby("_Date", dropna=False):
     st.markdown(f'<div class="date-header">{pd.to_datetime(d).strftime("%A, %B %d, %Y") if pd.notna(d) else "Unknown Date"}</div>', unsafe_allow_html=True)
-    widths = [.7,.5,county_w,addr_w,.8,.45,.75,.8,.8,.8,.9,.6,.9,note_w,.45]
-    headers = ["Time","Auct","County","Address","Deposit","Occ","Look","Comp","Rehab","Profit","Max","%","MaxS","Note","Ad"]
+    # Compact default widths. Sidebar sliders still control the wide text columns,
+    # but the fixed columns are intentionally tight so the grid does not run off-screen.
+    compact_county_w = min(float(county_w), 0.95)
+    compact_addr_w = min(float(addr_w), 2.25)
+    compact_note_w = min(float(note_w), 1.0)
+    widths = [.72,.45,compact_county_w,compact_addr_w,.72,.32,.50,.62,.62,.62,.72,.42,.72,compact_note_w,.32]
+    headers = ["Time","Auct","County","Address","Dep","Occ","Look","Comp","Rehab","Profit","Max","%","MaxS","Note","Ad"]
     if show_ai:
         widths += [.8,.8]
         headers += ["AI ARV","AI Max"]
     if show_links:
-        widths += [.8]
+        widths += [.55]
         headers += ["Links"]
-    widths += [1.35]
+    widths += [.45]
     headers += ["Hide"]
     cols = st.columns(widths)
     for c, h in zip(cols, headers):
@@ -425,7 +435,7 @@ for d, group in filtered.groupby("_Date", dropna=False):
             addr = r["Address"]
             cols[idx].markdown(f"[Z]({zillow_link(addr)}) / [R]({redfin_search_link(addr)})")
             idx += 1
-        if cols[idx].button("Hide", key=safe_key("hide", aid), use_container_width=True):
+        if cols[idx].button("×", key=safe_key("hide", aid), use_container_width=True, help="Hide this property"):
             hide_address(r["Address"])
             st.rerun()
 
