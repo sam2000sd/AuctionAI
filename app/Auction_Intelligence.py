@@ -25,7 +25,7 @@ from app.core.normalize import normalize_files
 from app.core.formulas import calc_bid
 from app.core.utils import money, pct, this_or_next_week, city_from_address, address_key, zillow_link, redfin_link, redfin_search_link, MD_COUNTIES
 from app.scrapers.sources import scrape_many, clear_cache
-from app.storage.local import load_bids, save_bids, merge_bids, load_hidden, hide_address, clear_hidden, load_blocked_cities, save_blocked_cities, load_favorite_auction_houses, save_favorite_auction_houses, load_layout_defaults, save_layout_defaults, remote_enabled
+from app.storage.local import load_bids, save_bids, merge_bids, load_hidden, hide_address, clear_hidden, load_blocked_cities, save_blocked_cities, load_favorite_properties, save_favorite_properties, toggle_favorite_property, load_layout_defaults, save_layout_defaults, remote_enabled
 
 st.set_page_config(page_title="Auction Intelligence", page_icon="🏛️", layout="wide")
 
@@ -515,8 +515,6 @@ def persist_user_state_before_refresh():
     try:
         if "blocked_cities_text" in st.session_state:
             save_blocked_cities(set(str(st.session_state.get("blocked_cities_text", "")).splitlines()))
-        if "favorite_auction_houses" in st.session_state:
-            save_favorite_auction_houses(set(st.session_state.get("favorite_auction_houses", [])))
     except Exception:
         pass
     try:
@@ -530,12 +528,6 @@ def persist_user_state_before_refresh():
 with st.sidebar:
     st.header("Auction Sources")
     selected = st.multiselect("Sources", AUCTION_HOUSES, default=default_value("source_filter_sidebar", AUCTION_HOUSES), key="source_filter_sidebar")
-
-    favorite_default = sorted(load_favorite_auction_houses())
-    favorites = st.multiselect("⭐ Favorite auction houses", AUCTION_HOUSES, default=favorite_default, key="favorite_auction_houses")
-    if set(favorites) != set(favorite_default):
-        save_favorite_auction_houses(set(favorites))
-    favorites_only = st.toggle("Show favorite auction houses only", default_value("favorites_only_toggle", False), key="favorites_only_toggle")
 
     c1, c2 = st.columns(2)
     if c1.button("Scrape AC"):
@@ -568,6 +560,7 @@ with st.sidebar:
     st.header("Focus")
     hide_hidden = st.toggle("Hide hidden properties", default_value("hide_hidden_toggle", True), key="hide_hidden_toggle")
     hide_blocked = st.toggle("Hide blocked cities", default_value("hide_blocked_toggle", True), key="hide_blocked_toggle")
+    favorites_only = st.toggle("Show favorited properties only", default_value("favorite_properties_only_toggle", False), key="favorite_properties_only_toggle")
     blocked = st.text_area("Blocked cities, one per line", value="\n".join(sorted(load_blocked_cities())), height=90, key="blocked_cities_text")
     if st.button("Save Blocked Cities", use_container_width=True):
         remember_filter_state()
@@ -600,7 +593,7 @@ with st.sidebar:
     if st.button("Save Default Layout", use_container_width=True):
         save_layout_defaults({
             "source_filter_sidebar": st.session_state.get("source_filter_sidebar", AUCTION_HOUSES),
-            "favorites_only_toggle": st.session_state.get("favorites_only_toggle", False),
+            "favorite_properties_only_toggle": st.session_state.get("favorite_properties_only_toggle", False),
             "auctioneer_grid_filter": st.session_state.get("auctioneer_grid_filter", []),
             "county_grid_filter": st.session_state.get("county_grid_filter", []),
             "date_view_filter": st.session_state.get("date_view_filter", "Current auction week"),
@@ -627,11 +620,11 @@ df = merge_bids(raw, bids) if not raw.empty else raw
 if not df.empty:
     df["County"] = df["County"].apply(lambda x: x if x in MD_COUNTIES else "Unknown County")
 
-# Favorite auction houses are user preferences, not scrape data. Keep them
+# Favorite properties are user preferences, not scrape data. Keep them
 # separate so refreshes cannot wipe them.
-favorite_houses = load_favorite_auction_houses()
-if st.session_state.get("favorites_only_toggle", False) and favorite_houses and not df.empty:
-    df = df[df["Auctioneer"].astype(str).str.upper().isin(favorite_houses)]
+favorite_properties = load_favorite_properties()
+if st.session_state.get("favorite_properties_only_toggle", False) and not df.empty:
+    df = df[df["Auction ID"].astype(str).isin(favorite_properties)]
 
 if df.empty:
     st.warning("No cached auction data found. Select sources in the sidebar and click a scrape/refresh button. First setup on a new computer installs dependencies once, but scraping is manual so startup stays fast.")
@@ -684,9 +677,9 @@ elif date_view == "All future":
     from datetime import date
     filtered = filtered[dates >= date.today()]
 
-if favorite_houses and not filtered.empty:
-    filtered["_FavHouse"] = filtered["Auctioneer"].astype(str).str.upper().isin(favorite_houses)
-    filtered = filtered.sort_values(["_FavHouse", "Sale Date & Time", "County", "Address"], ascending=[False, True, True, True]).drop(columns=["_FavHouse"], errors="ignore")
+if favorite_properties and not filtered.empty:
+    filtered["_FavProperty"] = filtered["Auction ID"].astype(str).isin(favorite_properties)
+    filtered = filtered.sort_values(["_FavProperty", "Sale Date & Time", "County", "Address"], ascending=[False, True, True, True]).drop(columns=["_FavProperty"], errors="ignore")
 else:
     filtered = filtered.sort_values(["Sale Date & Time", "County", "Address"])
 if filtered.empty:
@@ -729,8 +722,8 @@ filtered["_Date"] = pd.to_datetime(filtered["Sale Date & Time"], errors="coerce"
 
 for d, group in filtered.groupby("_Date", dropna=False):
     st.markdown(f'<div class="date-header">{pd.to_datetime(d).strftime("%A, %B %d, %Y") if pd.notna(d) else "Unknown Date"}</div>', unsafe_allow_html=True)
-    widths = [.7,.5,county_w,addr_w,.8,.45,.75,.8,.8,.8,.9,.6,.9,note_w,.45]
-    headers = ["Time","Auct","County","Address","Deposit","Occ","Look","Comp","Rehab","Profit","Max","%","MaxS","Note","Ad"]
+    widths = [.45,.7,.5,county_w,addr_w,.8,.45,.75,.8,.8,.8,.9,.6,.9,note_w,.45]
+    headers = ["Fav","Time","Auct","County","Address","Deposit","Occ","Look","Comp","Rehab","Profit","Max","%","MaxS","Note","Ad"]
     if show_ai:
         widths += [.8,.8]
         headers += ["AI ARV","AI Max"]
@@ -747,17 +740,20 @@ for d, group in filtered.groupby("_Date", dropna=False):
         aid = str(r["Auction ID"])
         cols = st.columns(widths)
         dt = pd.to_datetime(r["Sale Date & Time"], errors="coerce")
-        cols[0].write("" if pd.isna(dt) else dt.strftime("%I:%M %p"))
-        _auct = str(r["Auctioneer"]).upper()
-        cols[1].write(("⭐ " if _auct in favorite_houses else "") + str(r["Auctioneer"]))
-        cols[2].write(r["County"])
-        cols[3].write(r["Address"])
-        cols[4].write(r["Deposit"])
-        cols[5].checkbox("Occ", key=safe_key("occ", aid), label_visibility="collapsed")
-        cols[6].selectbox("Look", ["", "Y", "N", "YY", "Soso"], key=safe_key("look", aid), label_visibility="collapsed")
-        cols[7].text_input("Comp", key=safe_key("comp", aid), label_visibility="collapsed", placeholder="")
-        cols[8].text_input("Rehab", key=safe_key("rehab", aid), label_visibility="collapsed", placeholder="")
-        cols[9].text_input("Profit", key=safe_key("profit", aid), label_visibility="collapsed", placeholder="")
+        star_label = "⭐" if aid in favorite_properties else "☆"
+        if cols[0].button(star_label, key=safe_key("fav", aid), help="Favorite this auction property", use_container_width=True):
+            toggle_favorite_property(aid)
+            st.rerun()
+        cols[1].write("" if pd.isna(dt) else dt.strftime("%I:%M %p"))
+        cols[2].write(str(r["Auctioneer"]))
+        cols[3].write(r["County"])
+        cols[4].write(r["Address"])
+        cols[5].write(r["Deposit"])
+        cols[6].checkbox("Occ", key=safe_key("occ", aid), label_visibility="collapsed")
+        cols[7].selectbox("Look", ["", "Y", "N", "YY", "Soso"], key=safe_key("look", aid), label_visibility="collapsed")
+        cols[8].text_input("Comp", key=safe_key("comp", aid), label_visibility="collapsed", placeholder="")
+        cols[9].text_input("Rehab", key=safe_key("rehab", aid), label_visibility="collapsed", placeholder="")
+        cols[10].text_input("Profit", key=safe_key("profit", aid), label_visibility="collapsed", placeholder="")
         def _to_int(v):
             try:
                 txt = str(v or "").replace(",", "").strip()
@@ -768,13 +764,13 @@ for d, group in filtered.groupby("_Date", dropna=False):
         rehab = _to_int(st.session_state.get(safe_key("rehab", aid), ""))
         profit = _to_int(st.session_state.get(safe_key("profit", aid), ""))
         maxb, bidpct, maxs = calc_bid(comp, rehab, profit, sale_net, close1, close2, multiplier)
-        cols[10].write(money(maxb))
-        cols[11].write(pct(bidpct))
-        cols[12].write(money(maxs))
-        cols[13].text_input("Note", key=safe_key("note", aid), label_visibility="collapsed")
+        cols[11].write(money(maxb))
+        cols[12].write(pct(bidpct))
+        cols[13].write(money(maxs))
+        cols[14].text_input("Note", key=safe_key("note", aid), label_visibility="collapsed")
         link = clean_external_url(r.get("Ad Link", ""), r.get("Auctioneer", ""))
-        cols[14].markdown(f'<a href="{link}" target="_blank" rel="noopener noreferrer">Ad</a>' if link else "", unsafe_allow_html=True)
-        idx = 15
+        cols[15].markdown(f'<a href="{link}" target="_blank" rel="noopener noreferrer">Ad</a>' if link else "", unsafe_allow_html=True)
+        idx = 16
         if show_ai:
             # Starter AI: use current comp as AI ARV, and current calculated max as AI Max.
             cols[idx].write(money(float(comp or 0) * multiplier) if comp else "")

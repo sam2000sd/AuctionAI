@@ -10,7 +10,7 @@ from typing import Optional
 import pandas as pd
 import requests
 
-from app.core.config import BIDS_PATH, LOCAL_DIR, HIDDEN_PATH, BLOCKED_CITIES_PATH, LAYOUT_PATH, FAVORITE_AUCTION_HOUSES_PATH
+from app.core.config import BIDS_PATH, LOCAL_DIR, HIDDEN_PATH, BLOCKED_CITIES_PATH, LAYOUT_PATH, FAVORITE_PROPERTIES_PATH
 from app.core.utils import clean_text, address_key
 
 BID_COLUMNS = [
@@ -35,7 +35,6 @@ DEFAULT_BLOCKED_CITIES = {
     "Union Bridge",
 }
 
-VALID_AUCTION_HOUSES = {"AC", "TW", "HW", "MWC"}
 
 def _normalize_city_name(value: str) -> str:
     txt = clean_text(value)
@@ -65,7 +64,7 @@ REMOTE_FILENAMES = {
     str(HIDDEN_PATH.name): HIDDEN_PATH,
     str(BLOCKED_CITIES_PATH.name): BLOCKED_CITIES_PATH,
     str(LAYOUT_PATH.name): LAYOUT_PATH,
-    str(FAVORITE_AUCTION_HOUSES_PATH.name): FAVORITE_AUCTION_HOUSES_PATH,
+    str(FAVORITE_PROPERTIES_PATH.name): FAVORITE_PROPERTIES_PATH,
 }
 
 
@@ -298,12 +297,23 @@ def save_blocked_cities(values):
     save_set(BLOCKED_CITIES_PATH, {_normalize_city_name(v) for v in values if _normalize_city_name(v)})
 
 
-def load_favorite_auction_houses():
-    return {str(v).upper().strip() for v in load_set(FAVORITE_AUCTION_HOUSES_PATH) if str(v).upper().strip() in VALID_AUCTION_HOUSES}
+def load_favorite_properties():
+    return {clean_text(v) for v in load_set(FAVORITE_PROPERTIES_PATH) if clean_text(v)}
 
 
-def save_favorite_auction_houses(values):
-    save_set(FAVORITE_AUCTION_HOUSES_PATH, {str(v).upper().strip() for v in values if str(v).upper().strip() in VALID_AUCTION_HOUSES})
+def save_favorite_properties(values):
+    save_set(FAVORITE_PROPERTIES_PATH, {clean_text(v) for v in values if clean_text(v)})
+
+
+def toggle_favorite_property(auction_id):
+    favorites = load_favorite_properties()
+    aid = clean_text(auction_id)
+    if aid in favorites:
+        favorites.remove(aid)
+    elif aid:
+        favorites.add(aid)
+    save_favorite_properties(favorites)
+    return favorites
 
 
 def hide_address(address):
