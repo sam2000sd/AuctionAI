@@ -83,6 +83,41 @@ html, body, [data-testid="stAppViewContainer"] {
   border: 0 !important;
 }
 
+
+/* Fix Streamlit number inputs in dark sidebar: prevent white text on white boxes */
+[data-testid="stSidebar"] div[data-testid="stNumberInput"] input,
+[data-testid="stSidebar"] div[data-testid="stNumberInput"] input[type="number"],
+[data-testid="stSidebar"] div[data-testid="stNumberInput"] [role="spinbutton"] {
+  background: #ffffff !important;
+  color: #111827 !important;
+  -webkit-text-fill-color: #111827 !important;
+  opacity: 1 !important;
+  caret-color: #111827 !important;
+}
+[data-testid="stSidebar"] div[data-testid="stNumberInput"] input::placeholder {
+  color: #6b7280 !important;
+  -webkit-text-fill-color: #6b7280 !important;
+  opacity: 1 !important;
+}
+[data-testid="stSidebar"] div[data-testid="stNumberInput"] button,
+[data-testid="stSidebar"] div[data-testid="stNumberInput"] button[kind],
+[data-testid="stSidebar"] div[data-testid="stNumberInput"] [data-testid="stNumberInputStepDown"],
+[data-testid="stSidebar"] div[data-testid="stNumberInput"] [data-testid="stNumberInputStepUp"] {
+  background: #ffffff !important;
+  color: #111827 !important;
+  border-color: #d1d5db !important;
+  opacity: 1 !important;
+}
+[data-testid="stSidebar"] div[data-testid="stNumberInput"] button svg {
+  fill: #111827 !important;
+  color: #111827 !important;
+}
+[data-testid="stSidebar"] div[data-testid="stNumberInput"] div,
+[data-testid="stSidebar"] div[data-testid="stNumberInput"] span {
+  color: #111827 !important;
+  -webkit-text-fill-color: #111827 !important;
+}
+
 /* Main area */
 h1 {letter-spacing: -0.03em; color:#111827;}
 h2, h3 {color:#172033;}
