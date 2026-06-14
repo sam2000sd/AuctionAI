@@ -11,7 +11,7 @@ import pandas as pd
 import requests
 
 from app.core.config import BIDS_PATH, LOCAL_DIR, HIDDEN_PATH, BLOCKED_CITIES_PATH, LAYOUT_PATH
-from app.core.utils import clean_text
+from app.core.utils import clean_text, address_key
 
 BID_COLUMNS = [
     "Auction ID", "Saved At", "Sale Date & Time", "Auctioneer", "County", "Address",
@@ -176,19 +176,56 @@ def save_bids(df):
     _save_text(BIDS_PATH, csv_text)
 
 
+def _property_merge_key(df):
+    if df is None or df.empty:
+        return pd.Series(dtype=str)
+    addr = df.get("Address", pd.Series([""] * len(df))).apply(address_key)
+    auct = df.get("Auctioneer", pd.Series([""] * len(df))).fillna("").astype(str).str.upper().str.strip()
+    return addr + "|" + auct
+
+
 def merge_bids(auctions, bids):
-    if auctions.empty or bids.empty or "Auction ID" not in bids.columns:
+    """Merge saved user fields back into fresh scrape results.
+
+    Primary match is Auction ID. Fallback match is normalized address + auctioneer.
+    The fallback protects old archives created before the ID was made stable and
+    protects against source date/postponement changes.
+    """
+    if auctions.empty or bids.empty:
         return auctions
-    latest = bids.sort_values("Saved At").drop_duplicates("Auction ID", keep="last")
-    cols = ["Auction ID", "Occupied", "Look", "Comp", "Rehab", "Profit", "My Note"]
-    cols = [c for c in cols if c in latest.columns]
-    out = auctions.merge(latest[cols], on="Auction ID", how="left", suffixes=("", "_saved"))
-    for col in ["Occupied", "Look", "Comp", "Rehab", "Profit", "My Note"]:
-        sc = col + "_saved"
-        if sc in out.columns:
-            out[col] = out[sc].where(out[sc].notna(), out[col])
-            out = out.drop(columns=[sc])
-    return out
+    out = auctions.copy()
+    latest = bids.copy()
+    if "Saved At" in latest.columns:
+        latest = latest.sort_values("Saved At")
+
+    user_cols = ["Occupied", "Look", "Comp", "Rehab", "Profit", "My Note"]
+
+    # First merge by current stable Auction ID.
+    if "Auction ID" in latest.columns and "Auction ID" in out.columns:
+        by_id = latest.drop_duplicates("Auction ID", keep="last")
+        cols = ["Auction ID"] + [c for c in user_cols if c in by_id.columns]
+        out = out.merge(by_id[cols], on="Auction ID", how="left", suffixes=("", "_saved"))
+        for col in user_cols:
+            sc = col + "_saved"
+            if sc in out.columns:
+                out[col] = out[sc].where(out[sc].notna(), out[col])
+                out = out.drop(columns=[sc])
+
+    # Then fill remaining blanks from old archive rows by normalized address + auctioneer.
+    latest["_Merge Key"] = _property_merge_key(latest)
+    out["_Merge Key"] = _property_merge_key(out)
+    by_key = latest[latest["_Merge Key"].astype(str).str.len() > 1].drop_duplicates("_Merge Key", keep="last")
+    cols = ["_Merge Key"] + [c for c in user_cols if c in by_key.columns]
+    if cols != ["_Merge Key"]:
+        out = out.merge(by_key[cols], on="_Merge Key", how="left", suffixes=("", "_key_saved"))
+        for col in user_cols:
+            sc = col + "_key_saved"
+            if sc in out.columns:
+                current = out[col]
+                missing = current.isna() | current.astype(str).str.strip().str.lower().isin(["", "nan", "none", "0"])
+                out[col] = out[sc].where(missing & out[sc].notna(), out[col])
+                out = out.drop(columns=[sc])
+    return out.drop(columns=["_Merge Key"], errors="ignore")
 
 
 def load_set(path):

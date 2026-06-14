@@ -83,6 +83,24 @@ html, body, [data-testid="stAppViewContainer"] {
   border: 0 !important;
 }
 
+/* Strong readable sidebar field labels */
+[data-testid="stSidebar"] label,
+[data-testid="stSidebar"] label p,
+[data-testid="stSidebar"] label span,
+[data-testid="stSidebar"] .stNumberInput label,
+[data-testid="stSidebar"] .stTextArea label,
+[data-testid="stSidebar"] .stMultiSelect label {
+  color: #f8fafc !important;
+  -webkit-text-fill-color: #f8fafc !important;
+  opacity: 1 !important;
+  font-weight: 700 !important;
+}
+[data-testid="stSidebar"] .stCaptionContainer,
+[data-testid="stSidebar"] .stCaptionContainer p {
+  color: #cbd5e1 !important;
+  opacity: 1 !important;
+}
+
 
 /* Fix Streamlit number inputs in dark sidebar: prevent white text on white boxes */
 [data-testid="stSidebar"] div[data-testid="stNumberInput"] input,
@@ -112,10 +130,15 @@ html, body, [data-testid="stAppViewContainer"] {
   fill: #111827 !important;
   color: #111827 !important;
 }
-[data-testid="stSidebar"] div[data-testid="stNumberInput"] div,
-[data-testid="stSidebar"] div[data-testid="stNumberInput"] span {
-  color: #111827 !important;
-  -webkit-text-fill-color: #111827 !important;
+/* Keep the number-input label readable on the dark sidebar.
+   Do NOT force every div/span inside stNumberInput to dark; that made labels invisible. */
+[data-testid="stSidebar"] div[data-testid="stNumberInput"] label,
+[data-testid="stSidebar"] div[data-testid="stNumberInput"] label p,
+[data-testid="stSidebar"] div[data-testid="stNumberInput"] label span {
+  color: #f8fafc !important;
+  -webkit-text-fill-color: #f8fafc !important;
+  opacity: 1 !important;
+  font-weight: 700 !important;
 }
 
 /* Main area */
@@ -459,25 +482,47 @@ def build_save_df(df, multiplier, sale_net, close1, close2):
 st.title("Auction Intelligence")
 st.caption("Clean rebuild. Local Streamlit dashboard for Maryland/DC foreclosure auctions.")
 
+
+def persist_user_state_before_refresh():
+    """Save user-owned data before any scrape/cache refresh.
+
+    Scraping is allowed to replace scraped CSV cache, but it must never wipe
+    saved bids, notes, hidden properties, blocked cities, or layout choices.
+    This also catches the common case where blocked city text was typed but
+    the Save Blocked Cities button was not clicked before a refresh.
+    """
+    try:
+        if "blocked_cities_text" in st.session_state:
+            save_blocked_cities(set(str(st.session_state.get("blocked_cities_text", "")).splitlines()))
+    except Exception:
+        pass
+    try:
+        current = globals().get("filtered", pd.DataFrame())
+        if isinstance(current, pd.DataFrame) and not current.empty:
+            current_save = build_save_df(current, multiplier, sale_net, close1, close2)
+            save_bids(pd.concat([load_bids(), current_save], ignore_index=True).sort_values("Saved At").drop_duplicates("Auction ID", keep="last"))
+    except Exception:
+        pass
+
 with st.sidebar:
     st.header("Auction Sources")
     selected = st.multiselect("Sources", ["AC", "TW", "HW", "MWC"], default=default_value("source_filter_sidebar", ["AC", "TW", "HW", "MWC"]), key="source_filter_sidebar")
 
     c1, c2 = st.columns(2)
     if c1.button("Scrape AC"):
-        st.session_state.last_scrape = scrape_many(["AC"], clear_old=False); st.cache_data.clear(); st.session_state.pop("loaded_ids", None); st.rerun()
+        persist_user_state_before_refresh(); st.session_state.last_scrape = scrape_many(["AC"], clear_old=False); st.cache_data.clear(); st.session_state.pop("loaded_ids", None); st.rerun()
     if c2.button("Scrape TW"):
-        st.session_state.last_scrape = scrape_many(["TW"], clear_old=False); st.cache_data.clear(); st.session_state.pop("loaded_ids", None); st.rerun()
+        persist_user_state_before_refresh(); st.session_state.last_scrape = scrape_many(["TW"], clear_old=False); st.cache_data.clear(); st.session_state.pop("loaded_ids", None); st.rerun()
     c3, c4 = st.columns(2)
     if c3.button("Scrape HW"):
-        st.session_state.last_scrape = scrape_many(["HW"], clear_old=False); st.cache_data.clear(); st.session_state.pop("loaded_ids", None); st.rerun()
+        persist_user_state_before_refresh(); st.session_state.last_scrape = scrape_many(["HW"], clear_old=False); st.cache_data.clear(); st.session_state.pop("loaded_ids", None); st.rerun()
     if c4.button("Scrape MWC"):
-        st.session_state.last_scrape = scrape_many(["MWC"], clear_old=False); st.cache_data.clear(); st.session_state.pop("loaded_ids", None); st.rerun()
+        persist_user_state_before_refresh(); st.session_state.last_scrape = scrape_many(["MWC"], clear_old=False); st.cache_data.clear(); st.session_state.pop("loaded_ids", None); st.rerun()
 
     if st.button("Full Refresh Selected", type="primary", use_container_width=True):
-        st.session_state.last_scrape = scrape_many(selected, clear_old=True); st.cache_data.clear(); st.session_state.pop("loaded_ids", None); st.rerun()
+        persist_user_state_before_refresh(); st.session_state.last_scrape = scrape_many(selected, clear_old=True); st.cache_data.clear(); st.session_state.pop("loaded_ids", None); st.rerun()
     if st.button("Clear Scraped Cache", use_container_width=True):
-        clear_cache(); st.cache_data.clear(); st.session_state.pop("loaded_ids", None); st.rerun()
+        persist_user_state_before_refresh(); clear_cache(); st.cache_data.clear(); st.session_state.pop("loaded_ids", None); st.rerun()
 
     if "last_scrape" in st.session_state:
         st.write("Last scrape:")

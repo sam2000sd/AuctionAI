@@ -249,11 +249,17 @@ def normalize_deposit(value):
     return txt, 0
 
 def auction_id(row) -> str:
+    """Stable property key for saved/hidden/archive persistence.
+
+    Do not include sale date. Auction dates are often postponed or corrected;
+    if the date is part of the ID, the same property becomes a new record after
+    every scrape and saved notes/archive appear to disappear.
+    """
     key = "|".join([
-        str(row.get("Sale Date & Time", "")),
-        str(row.get("Address", "")),
-        str(row.get("Auctioneer", "")),
-    ]).upper()
+        address_key(row.get("Address", "")),
+        normalize_county(row.get("County", "")),
+        str(row.get("Auctioneer", "")).upper().strip(),
+    ])
     return hashlib.sha256(key.encode("utf-8")).hexdigest()[:20]
 
 def money(value):
