@@ -24,7 +24,7 @@ from app.core.normalize import normalize_files
 from app.core.formulas import calc_bid
 from app.core.utils import money, pct, this_or_next_week, city_from_address, address_key, zillow_link, redfin_link, redfin_search_link, MD_COUNTIES
 from app.scrapers.sources import scrape_many, clear_cache
-from app.storage.local import load_bids, save_bids, merge_bids, load_hidden, hide_address, clear_hidden, load_blocked_cities, save_blocked_cities, load_layout_defaults, save_layout_defaults
+from app.storage.local import load_bids, save_bids, merge_bids, load_hidden, hide_address, clear_hidden, load_blocked_cities, save_blocked_cities, load_layout_defaults, save_layout_defaults, remote_enabled
 
 st.set_page_config(page_title="Auction Intelligence", page_icon="🏛️", layout="wide")
 
@@ -172,7 +172,8 @@ def start_shutdown_listener():
 
     threading.Thread(target=run_server, daemon=True).start()
 
-start_shutdown_listener()
+if os.getenv("STREAMLIT_SERVER_HEADLESS") != "true":
+    start_shutdown_listener()
 components.html("""
 <script>
 (function () {
@@ -184,6 +185,19 @@ components.html("""
   window.addEventListener('beforeunload', function () {
     try { navigator.sendBeacon('http://127.0.0.1:8765/closed', '1'); } catch(e) {}
   });
+})();
+</script>
+""", height=0)
+
+# Keeps an open browser tab active by touching the Streamlit server periodically.
+# This reduces idle sleep on many hosts, but a host-level hard restart still requires durable storage.
+components.html("""
+<script>
+(function () {
+  async function keepAwake(){
+    try { await fetch(window.location.href, {cache: 'no-store'}); } catch(e) {}
+  }
+  setInterval(keepAwake, 5 * 60 * 1000);
 })();
 </script>
 """, height=0)
@@ -439,6 +453,7 @@ with st.sidebar:
                 st.error(f"{s}: {res['error']}")
 
     st.write(f"Cache files: **{len(paths())}**")
+    st.caption("Storage: durable GitHub Gist backup is ON" if remote_enabled() else "Storage: local file only. On Streamlit Cloud, add GITHUB_TOKEN and GIST_ID secrets or archives can disappear after sleep/restart.")
 
     st.divider()
     st.header("Focus")
@@ -562,11 +577,24 @@ if not visible_save.empty:
     combined = combined.sort_values("Saved At").drop_duplicates("Auction ID", keep="last")
     save_bids(combined)
 
-top1, top2, top3 = st.columns([1,1,4])
+top1, top2, top3, top4 = st.columns([1,1,1,3])
 if top1.button("Save Bids", type="primary", use_container_width=True):
     save_bids(pd.concat([load_bids(), visible_save], ignore_index=True).sort_values("Saved At").drop_duplicates("Auction ID", keep="last"))
     st.success("Saved")
+
 top2.download_button("Export Excel", data=excel_bytes(visible_save, sale_net, close1, close2), file_name="auction_intelligence.xlsx", use_container_width=True)
+current_archive_csv = load_bids().to_csv(index=False)
+top3.download_button("Backup Archive", data=current_archive_csv, file_name="auction_archive_backup.csv", mime="text/csv", use_container_width=True)
+with top4.expander("Restore archive from backup CSV"):
+    restore_file = st.file_uploader("Upload auction_archive_backup.csv", type=["csv"], key="restore_archive_csv")
+    if restore_file is not None and st.button("Restore Archive", type="primary"):
+        try:
+            restored = pd.read_csv(restore_file)
+            save_bids(pd.concat([load_bids(), restored], ignore_index=True).sort_values("Saved At").drop_duplicates("Auction ID", keep="last"))
+            st.success("Archive restored and saved.")
+            st.rerun()
+        except Exception as e:
+            st.error(f"Could not restore CSV: {e}")
 
 st.subheader("Main Auction Grid")
 if date_view == "Current auction week":
