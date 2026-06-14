@@ -18,6 +18,34 @@ BID_COLUMNS = [
     "Deposit", "Occupied", "Look", "Comp", "Rehab", "Profit", "Max", "%", "MaxS", "My Note"
 ]
 
+def _comp_to_number(value) -> float:
+    try:
+        if value is None:
+            return 0.0
+        txt = str(value).replace(',', '').replace('$', '').strip()
+        if txt.lower() in {'', 'nan', 'none', 'null'}:
+            return 0.0
+        return float(txt)
+    except Exception:
+        return 0.0
+
+
+def _archive_nonzero_comp_only(df: pd.DataFrame) -> pd.DataFrame:
+    """Saved Bid Archive rule: never keep rows unless Comp is filled and > 0.
+
+    This prevents blank/zero comp rows from being auto-saved during scrape,
+    refresh, restore, or visible-grid autosave. User fields can still appear in
+    the live grid, but the archive only stores analyzed deals.
+    """
+    if df is None or df.empty:
+        return pd.DataFrame(columns=BID_COLUMNS)
+    out = df.copy()
+    if 'Comp' not in out.columns:
+        return pd.DataFrame(columns=BID_COLUMNS)
+    comp = out['Comp'].apply(_comp_to_number)
+    out = out[comp > 0].copy()
+    return out
+
 DEFAULT_BLOCKED_CITIES = {
     "Brentwood",
     "Capitol Heights",
@@ -190,11 +218,11 @@ def load_bids():
         for c in BID_COLUMNS:
             if c not in df.columns:
                 df[c] = ""
-        return df
+        return _archive_nonzero_comp_only(df)
     except Exception:
         if _recover_latest_backup(BIDS_PATH):
             try:
-                return pd.read_csv(BIDS_PATH)
+                return _archive_nonzero_comp_only(pd.read_csv(BIDS_PATH))
             except Exception:
                 pass
         return pd.DataFrame(columns=BID_COLUMNS)
@@ -207,6 +235,10 @@ def save_bids(df):
     for c in BID_COLUMNS:
         if c not in df.columns:
             df[c] = ""
+    # Saved Bid Archive must contain only real analyzed bids.
+    # Blank/zero Comp rows are live-grid drafts, not archive records.
+    df = _archive_nonzero_comp_only(df)
+
     # keep only the newest row per auction id, then save atomically and to cloud backup if configured
     if not df.empty and "Auction ID" in df.columns and "Saved At" in df.columns:
         df = df.sort_values("Saved At").drop_duplicates("Auction ID", keep="last")
