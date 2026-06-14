@@ -4,6 +4,7 @@ from __future__ import annotations
 from datetime import datetime
 from io import BytesIO
 from pathlib import Path
+from urllib.parse import urlparse, parse_qs, unquote
 import os
 import sys
 import threading
@@ -24,7 +25,7 @@ from app.core.normalize import normalize_files
 from app.core.formulas import calc_bid
 from app.core.utils import money, pct, this_or_next_week, city_from_address, address_key, zillow_link, redfin_link, redfin_search_link, MD_COUNTIES
 from app.scrapers.sources import scrape_many, clear_cache
-from app.storage.local import load_bids, save_bids, merge_bids, load_hidden, hide_address, clear_hidden, load_blocked_cities, save_blocked_cities, load_layout_defaults, save_layout_defaults, remote_enabled
+from app.storage.local import load_bids, save_bids, merge_bids, load_hidden, hide_address, clear_hidden, load_blocked_cities, save_blocked_cities, load_favorite_auction_houses, save_favorite_auction_houses, load_layout_defaults, save_layout_defaults, remote_enabled
 
 st.set_page_config(page_title="Auction Intelligence", page_icon="🏛️", layout="wide")
 
@@ -177,6 +178,8 @@ a:hover {text-decoration:underline;}
 SCRAPED_DIR.mkdir(parents=True, exist_ok=True)
 EXPORT_DIR.mkdir(parents=True, exist_ok=True)
 layout_defaults = load_layout_defaults()
+AUCTION_HOUSES = ["AC", "TW", "HW", "MWC"]
+DEFAULT_COUNTY_FILTER = ["Montgomery County", "Prince George's County", "Howard County", "Frederick County", "Anne Arundel County", "Washington, DC"]
 
 def default_value(key, fallback):
     return layout_defaults.get(key, fallback)
@@ -269,7 +272,7 @@ def load_data(path_strings, mtimes):
     return normalize_files([Path(p) for p in path_strings])
 
 def clean_external_url(raw, auctioneer=""):
-    """Return a real outside URL only. Prevents Streamlit from opening itself for bad/blank links."""
+    """Return a real ad URL only. Suppresses Google search/map links and unwraps Google redirects."""
     url = str(raw or "").strip()
     if not url or url.lower() in {"nan", "none", "#"} or url.startswith("javascript:"):
         return ""
@@ -284,11 +287,29 @@ def clean_external_url(raw, auctioneer=""):
         }
         base = base_by_auctioneer.get(str(auctioneer or "").upper(), "")
         url = base + url if base else ""
+
+    # Unwrap google.com/url?q=<real auction ad> but do not show Google search/maps as Ad.
+    for _ in range(2):
+        try:
+            parsed = urlparse(url)
+            host = (parsed.netloc or "").lower()
+            if host.endswith("google.com") or host.endswith("googleusercontent.com"):
+                qs = parse_qs(parsed.query)
+                target = (qs.get("q") or qs.get("url") or qs.get("u") or [""])[0]
+                if target:
+                    url = unquote(target)
+                    continue
+                return ""
+        except Exception:
+            return ""
+        break
+
     low = url.lower()
     if not (low.startswith("http://") or low.startswith("https://")):
         return ""
-    # If a bad relative/empty link somehow becomes the Streamlit app URL, suppress it.
     if "streamlit.app" in low or "localhost:8501" in low or "127.0.0.1:8501" in low:
+        return ""
+    if "google.com/search" in low or "google.com/maps" in low or "maps.google" in low:
         return ""
     return url
 
@@ -494,6 +515,8 @@ def persist_user_state_before_refresh():
     try:
         if "blocked_cities_text" in st.session_state:
             save_blocked_cities(set(str(st.session_state.get("blocked_cities_text", "")).splitlines()))
+        if "favorite_auction_houses" in st.session_state:
+            save_favorite_auction_houses(set(st.session_state.get("favorite_auction_houses", [])))
     except Exception:
         pass
     try:
@@ -506,7 +529,13 @@ def persist_user_state_before_refresh():
 
 with st.sidebar:
     st.header("Auction Sources")
-    selected = st.multiselect("Sources", ["AC", "TW", "HW", "MWC"], default=default_value("source_filter_sidebar", ["AC", "TW", "HW", "MWC"]), key="source_filter_sidebar")
+    selected = st.multiselect("Sources", AUCTION_HOUSES, default=default_value("source_filter_sidebar", AUCTION_HOUSES), key="source_filter_sidebar")
+
+    favorite_default = sorted(load_favorite_auction_houses())
+    favorites = st.multiselect("⭐ Favorite auction houses", AUCTION_HOUSES, default=favorite_default, key="favorite_auction_houses")
+    if set(favorites) != set(favorite_default):
+        save_favorite_auction_houses(set(favorites))
+    favorites_only = st.toggle("Show favorite auction houses only", default_value("favorites_only_toggle", False), key="favorites_only_toggle")
 
     c1, c2 = st.columns(2)
     if c1.button("Scrape AC"):
@@ -570,7 +599,8 @@ with st.sidebar:
 
     if st.button("Save Default Layout", use_container_width=True):
         save_layout_defaults({
-            "source_filter_sidebar": st.session_state.get("source_filter_sidebar", ["AC", "TW", "HW", "MWC"]),
+            "source_filter_sidebar": st.session_state.get("source_filter_sidebar", AUCTION_HOUSES),
+            "favorites_only_toggle": st.session_state.get("favorites_only_toggle", False),
             "auctioneer_grid_filter": st.session_state.get("auctioneer_grid_filter", []),
             "county_grid_filter": st.session_state.get("county_grid_filter", []),
             "date_view_filter": st.session_state.get("date_view_filter", "Current auction week"),
@@ -597,6 +627,12 @@ df = merge_bids(raw, bids) if not raw.empty else raw
 if not df.empty:
     df["County"] = df["County"].apply(lambda x: x if x in MD_COUNTIES else "Unknown County")
 
+# Favorite auction houses are user preferences, not scrape data. Keep them
+# separate so refreshes cannot wipe them.
+favorite_houses = load_favorite_auction_houses()
+if st.session_state.get("favorites_only_toggle", False) and favorite_houses and not df.empty:
+    df = df[df["Auctioneer"].astype(str).str.upper().isin(favorite_houses)]
+
 if df.empty:
     st.warning("No cached auction data found. Select sources in the sidebar and click a scrape/refresh button. First setup on a new computer installs dependencies once, but scraping is manual so startup stays fast.")
     st.stop()
@@ -614,7 +650,7 @@ if hide_blocked:
 st.subheader("Filters")
 for _lk, _lv in {
     "auctioneer_grid_filter": default_value("auctioneer_grid_filter", []),
-    "county_grid_filter": default_value("county_grid_filter", []),
+    "county_grid_filter": default_value("county_grid_filter", DEFAULT_COUNTY_FILTER),
     "date_view_filter": default_value("date_view_filter", "Current auction week"),
 }.items():
     if _lk not in st.session_state:
@@ -623,6 +659,10 @@ f1, f2, f3, f4 = st.columns([1, 1.5, 2, 1.3])
 auctioneer_filter = f1.multiselect("Auctioneer", sorted(df["Auctioneer"].dropna().unique()), key="auctioneer_grid_filter")
 county_values = set(df["County"].dropna().astype(str))
 county_options = [c for c in MD_COUNTIES if c in county_values]
+# First launch defaults to Sam's target counties. Saved layout overrides this.
+county_default = [c for c in default_value("county_grid_filter", DEFAULT_COUNTY_FILTER) if c in county_options]
+if "county_grid_filter" not in st.session_state:
+    st.session_state["county_grid_filter"] = county_default
 county_filter = f2.multiselect("County", county_options, key="county_grid_filter")
 search = f3.text_input("Search", key="search_grid_filter")
 date_view = f4.radio("Date view", ["Current auction week", "All future", "All dates"], horizontal=False, key="date_view_filter")
@@ -644,7 +684,11 @@ elif date_view == "All future":
     from datetime import date
     filtered = filtered[dates >= date.today()]
 
-filtered = filtered.sort_values(["Sale Date & Time", "County", "Address"])
+if favorite_houses and not filtered.empty:
+    filtered["_FavHouse"] = filtered["Auctioneer"].astype(str).str.upper().isin(favorite_houses)
+    filtered = filtered.sort_values(["_FavHouse", "Sale Date & Time", "County", "Address"], ascending=[False, True, True, True]).drop(columns=["_FavHouse"], errors="ignore")
+else:
+    filtered = filtered.sort_values(["Sale Date & Time", "County", "Address"])
 if filtered.empty:
     st.info("No auctions match filters.")
     st.stop()
@@ -704,7 +748,8 @@ for d, group in filtered.groupby("_Date", dropna=False):
         cols = st.columns(widths)
         dt = pd.to_datetime(r["Sale Date & Time"], errors="coerce")
         cols[0].write("" if pd.isna(dt) else dt.strftime("%I:%M %p"))
-        cols[1].write(r["Auctioneer"])
+        _auct = str(r["Auctioneer"]).upper()
+        cols[1].write(("⭐ " if _auct in favorite_houses else "") + str(r["Auctioneer"]))
         cols[2].write(r["County"])
         cols[3].write(r["Address"])
         cols[4].write(r["Deposit"])

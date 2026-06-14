@@ -6,7 +6,7 @@ from pathlib import Path
 import re
 import sys
 import subprocess
-from urllib.parse import urljoin
+from urllib.parse import urljoin, urlparse, parse_qs, unquote
 
 import pandas as pd
 import requests
@@ -64,6 +64,38 @@ def clear_cache():
         p.unlink(missing_ok=True)
 
 
+
+def normalize_ad_url(raw, base_url):
+    """Return a real auction ad URL. Never return Google search/map/redirect URLs."""
+    href = str(raw or "").strip()
+    if not href or href.startswith("javascript:") or href.startswith("#"):
+        return ""
+    full = urljoin(base_url, href)
+
+    # Some pages wrap outbound links through google.com/url?q=<real url>. Unwrap it.
+    for _ in range(2):
+        try:
+            parsed = urlparse(full)
+            host = (parsed.netloc or "").lower()
+            if host.endswith("google.com") or host.endswith("googleusercontent.com"):
+                qs = parse_qs(parsed.query)
+                target = (qs.get("q") or qs.get("url") or qs.get("u" ) or [""])[0]
+                if target:
+                    full = unquote(target)
+                    continue
+                # Google maps/search/calendar links are not auction ads.
+                return ""
+        except Exception:
+            return ""
+        break
+
+    low = full.lower()
+    if not (low.startswith("http://") or low.startswith("https://")):
+        return ""
+    if "google.com/search" in low or "google.com/maps" in low or "maps.google" in low:
+        return ""
+    return full
+
 def row_direct_link(tr, base_url):
     """Return the best row-level advertisement/detail link, not the source homepage."""
     links = []
@@ -73,7 +105,9 @@ def row_direct_link(tr, base_url):
         href = (a.get("href") or "").strip()
         if not href or href.startswith("javascript:") or href.startswith("#"):
             continue
-        full = urljoin(base_url, href)
+        full = normalize_ad_url(href, base_url)
+        if not full:
+            continue
         full_clean = full.rstrip("/").lower()
         if full_clean == base_clean:
             continue
@@ -127,7 +161,9 @@ def build_link_candidates(html, base_url):
         href = (a.get("href") or "").strip()
         if not href or href.startswith("javascript:") or href.startswith("#"):
             continue
-        full = urljoin(base_url, href)
+        full = normalize_ad_url(href, base_url)
+        if not full:
+            continue
         if full.rstrip("/").lower() == base_clean:
             continue
         a_text = clean_text(a.get_text(" ")).lower()

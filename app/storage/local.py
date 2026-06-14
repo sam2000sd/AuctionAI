@@ -10,13 +10,51 @@ from typing import Optional
 import pandas as pd
 import requests
 
-from app.core.config import BIDS_PATH, LOCAL_DIR, HIDDEN_PATH, BLOCKED_CITIES_PATH, LAYOUT_PATH
+from app.core.config import BIDS_PATH, LOCAL_DIR, HIDDEN_PATH, BLOCKED_CITIES_PATH, LAYOUT_PATH, FAVORITE_AUCTION_HOUSES_PATH
 from app.core.utils import clean_text, address_key
 
 BID_COLUMNS = [
     "Auction ID", "Saved At", "Sale Date & Time", "Auctioneer", "County", "Address",
     "Deposit", "Occupied", "Look", "Comp", "Rehab", "Profit", "Max", "%", "MaxS", "My Note"
 ]
+
+DEFAULT_BLOCKED_CITIES = {
+    "Brentwood",
+    "Capitol Heights",
+    "District Heights",
+    "Cheverly",
+    "Camp Spring",
+    "Camp Springs",
+    "Temple Hills",
+    "Landover",
+    "Glen Burnie",
+    "Hyattsville",
+    "Oxon Hill",
+    "Pasadena",
+    "Riverdale",
+    "Union Bridge",
+}
+
+VALID_AUCTION_HOUSES = {"AC", "TW", "HW", "MWC"}
+
+def _normalize_city_name(value: str) -> str:
+    txt = clean_text(value)
+    if not txt:
+        return ""
+    # Normalize legal ad wording such as “a/r/t/a Camp Springs” so the block
+    # survives scraped address variations.
+    low = txt.lower()
+    if "a/r/t/a" in low:
+        txt = txt[:low.index("a/r/t/a")].strip()
+    txt = txt.replace("  ", " ").strip(" ,")
+    aliases = {
+        "Camp Spring": "Camp Springs",
+        "Temple Hills A/R/T/A Camp Springs": "Temple Hills",
+        "Landover A/R/T/A Cheverly": "Landover",
+    }
+    titled = txt.title()
+    return aliases.get(titled, titled)
+
 
 # Optional durable cloud storage.
 # For Streamlit Cloud, add these in App settings -> Secrets:
@@ -27,6 +65,7 @@ REMOTE_FILENAMES = {
     str(HIDDEN_PATH.name): HIDDEN_PATH,
     str(BLOCKED_CITIES_PATH.name): BLOCKED_CITIES_PATH,
     str(LAYOUT_PATH.name): LAYOUT_PATH,
+    str(FAVORITE_AUCTION_HOUSES_PATH.name): FAVORITE_AUCTION_HOUSES_PATH,
 }
 
 
@@ -246,11 +285,25 @@ def save_hidden(values):
 
 
 def load_blocked_cities():
-    return load_set(BLOCKED_CITIES_PATH)
+    values = {_normalize_city_name(v) for v in load_set(BLOCKED_CITIES_PATH)}
+    values = {v for v in values if v}
+    # First launch default. Once the file exists, respect whatever the user saved.
+    if not values and not BLOCKED_CITIES_PATH.exists():
+        values = set(DEFAULT_BLOCKED_CITIES)
+        save_blocked_cities(values)
+    return values
 
 
 def save_blocked_cities(values):
-    save_set(BLOCKED_CITIES_PATH, {clean_text(v).title() for v in values if clean_text(v)})
+    save_set(BLOCKED_CITIES_PATH, {_normalize_city_name(v) for v in values if _normalize_city_name(v)})
+
+
+def load_favorite_auction_houses():
+    return {str(v).upper().strip() for v in load_set(FAVORITE_AUCTION_HOUSES_PATH) if str(v).upper().strip() in VALID_AUCTION_HOUSES}
+
+
+def save_favorite_auction_houses(values):
+    save_set(FAVORITE_AUCTION_HOUSES_PATH, {str(v).upper().strip() for v in values if str(v).upper().strip() in VALID_AUCTION_HOUSES})
 
 
 def hide_address(address):
