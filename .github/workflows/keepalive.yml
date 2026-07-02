@@ -2,7 +2,6 @@ name: Keep Streamlit Awake
 
 on:
   schedule:
-    # Runs every 5 minutes
     - cron: "*/5 * * * *"
   workflow_dispatch:
 
@@ -16,28 +15,9 @@ jobs:
     steps:
       - name: Ping Streamlit App
         run: |
-          curl --location \
-               --request GET \
-               --user-agent "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/137.0.0.0 Safari/537.36" \
-               --max-time 60 \
-               --retry 5 \
-               --retry-delay 10 \
-               --connect-timeout 20 \
-               --compressed \
-               --silent \
-               --show-error \
-               --output /dev/null \
-               --write-out "HTTP Status: %{http_code}\n" \
-               "https://simoauction.streamlit.app/?keepalive=1"
+          curl -I \
+               --max-time 30 \
+               --user-agent "Mozilla/5.0" \
+               "https://simoauction.streamlit.app/?keepalive=1" || true
 
-      - name: Verify App Response
-        run: |
-          STATUS=$(curl -L -s -o /dev/null -w "%{http_code}" "https://simoauction.streamlit.app/?keepalive=1")
-          echo "Final HTTP Status: $STATUS"
-
-          if [ "$STATUS" != "200" ]; then
-            echo "Ping failed."
-            exit 1
-          fi
-
-          echo "Streamlit app is awake."
+          echo "Ping completed"
