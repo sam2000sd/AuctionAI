@@ -15,9 +15,9 @@ jobs:
     steps:
       - name: Ping Streamlit App
         run: |
+          echo "Pinging Streamlit app..."
           curl -I \
-               --max-time 30 \
-               --user-agent "Mozilla/5.0" \
-               "https://simoauction.streamlit.app/?keepalive=1" || true
-
+            --max-time 30 \
+            "https://simoauction.streamlit.app/?keepalive=1" \
+            || true
           echo "Ping completed"
