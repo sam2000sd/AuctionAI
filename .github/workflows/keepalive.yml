@@ -13,11 +13,13 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Ping Streamlit App
+      - name: Wake Streamlit App
         run: |
-          echo "Pinging Streamlit app..."
-          curl -I \
-            --max-time 30 \
-            "https://simoauction.streamlit.app/?keepalive=1" \
-            || true
-          echo "Ping completed"
+          echo "Pinging Streamlit..."
+          curl --head \
+               --silent \
+               --show-error \
+               --max-time 30 \
+               --connect-timeout 10 \
+               https://simoauction.streamlit.app/?keepalive=1
+          echo "Done."
