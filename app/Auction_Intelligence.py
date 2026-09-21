@@ -172,13 +172,43 @@ div[data-testid="stHorizontalBlock"] {align-items: start;}
 .stAlert {border-radius: 12px;}
 a {color:#1d4ed8; font-weight:650; text-decoration:none;}
 a:hover {text-decoration:underline;}
+
+/* Brand header */
+.app-brand {display:flex; align-items:center; gap:10px; margin-bottom:-6px;}
+.app-brand .badge {background:#111827; color:#fff; font-size:.72rem; font-weight:800; letter-spacing:.05em; padding:4px 10px; border-radius:999px;}
+
+/* Phone / narrow viewport: keep the desktop grid usable instead of Streamlit's
+   default behavior of stacking every column full-width, which turns each
+   auction row into a very long vertical list on an iPhone. */
+@media (max-width: 900px) {
+  .block-container {padding-left: .6rem !important; padding-right: .6rem !important; padding-top: .75rem !important;}
+  h1 {font-size: 1.4rem !important;}
+  .date-header {font-size: .95rem !important; padding: 9px 12px !important;}
+
+  div[data-testid="stHorizontalBlock"] {
+    flex-wrap: nowrap !important;
+    overflow-x: auto !important;
+    -webkit-overflow-scrolling: touch !important;
+    padding-bottom: 10px !important;
+  }
+  div[data-testid="stHorizontalBlock"] > div {
+    min-width: 108px !important;
+    flex-shrink: 0 !important;
+  }
+  div.stButton > button, div.stDownloadButton > button {
+    min-height: 44px !important;
+    font-size: .95rem !important;
+  }
+  /* iOS Safari auto-zooms on inputs with a font-size under 16px. */
+  input, select, textarea {font-size: 16px !important;}
+}
 </style>
 """, unsafe_allow_html=True)
 
 SCRAPED_DIR.mkdir(parents=True, exist_ok=True)
 EXPORT_DIR.mkdir(parents=True, exist_ok=True)
 layout_defaults = load_layout_defaults()
-AUCTION_HOUSES = ["AC", "TW", "HW", "MWC"]
+AUCTION_HOUSES = ["AC", "TW", "HW", "MWC", "BL"]
 DEFAULT_COUNTY_FILTER = ["Montgomery County", "Prince George's County", "Howard County", "Frederick County", "Anne Arundel County", "Washington, DC"]
 
 def default_value(key, fallback):
@@ -284,6 +314,7 @@ def clean_external_url(raw, auctioneer=""):
             "AC": "https://realestate.alexcooper.com",
             "HW": "https://www.hwestauctions.com",
             "MWC": "https://apps.mwc-law.com",
+            "BL": "https://ajbillig.com",
         }
         base = base_by_auctioneer.get(str(auctioneer or "").upper(), "")
         url = base + url if base else ""
@@ -500,8 +531,9 @@ def build_save_df(df, multiplier, sale_net, close1, close2):
         rows.append(row)
     return pd.DataFrame(rows)
 
+st.markdown('<div class="app-brand"><span class="badge">SIMO HOMES</span></div>', unsafe_allow_html=True)
 st.title("Auction Intelligence")
-st.caption("Clean rebuild. Local Streamlit dashboard for Maryland/DC foreclosure auctions.")
+st.caption("Maryland/DC foreclosure auction dashboard — AC, TW, HW, MWC, and A. J. Billig (BL).")
 
 
 def persist_user_state_before_refresh():
@@ -539,6 +571,8 @@ with st.sidebar:
         persist_user_state_before_refresh(); st.session_state.last_scrape = scrape_many(["HW"], clear_old=False); st.cache_data.clear(); st.session_state.pop("loaded_ids", None); st.rerun()
     if c4.button("Scrape MWC"):
         persist_user_state_before_refresh(); st.session_state.last_scrape = scrape_many(["MWC"], clear_old=False); st.cache_data.clear(); st.session_state.pop("loaded_ids", None); st.rerun()
+    if st.button("Scrape BL (Howard Co. + more)", use_container_width=True):
+        persist_user_state_before_refresh(); st.session_state.last_scrape = scrape_many(["BL"], clear_old=False); st.cache_data.clear(); st.session_state.pop("loaded_ids", None); st.rerun()
 
     if st.button("Full Refresh Selected", type="primary", use_container_width=True):
         persist_user_state_before_refresh(); st.session_state.last_scrape = scrape_many(selected, clear_old=True); st.cache_data.clear(); st.session_state.pop("loaded_ids", None); st.rerun()
