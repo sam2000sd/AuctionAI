@@ -27,6 +27,8 @@ def normalize_files(paths):
         out["Deposit Amount"] = dep.apply(lambda x: x[1])
         out["Status"] = df.get("status", "Active")
         out["Ad Link"] = df.get("ad link", "")
+        out["Occupancy"] = df["occupancy"].fillna("").astype(str) if "occupancy" in df.columns else ""
+        out["Venue"] = df["venue"].fillna("").astype(str) if "venue" in df.columns else ""
         # Hard safety net: if any raw row text says cancelled/postponed/withdrawn,
         # exclude it even if the scraper accidentally labeled it Active.
         raw_text = df.fillna("").map(lambda x: str(x)).agg(" ".join, axis=1)
