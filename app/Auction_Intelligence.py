@@ -6,6 +6,7 @@ from io import BytesIO
 from pathlib import Path
 from urllib.parse import urlparse, parse_qs, unquote
 import os
+import re
 import sys
 import threading
 from http.server import BaseHTTPRequestHandler, HTTPServer
@@ -151,12 +152,13 @@ a:hover { text-decoration: underline; }
 [class*="st-key-grid_card_"] .gc.muted { color: var(--ai-muted); }
 [class*="st-key-grid_card_"] .gc.addr { font-weight: 600; }
 [class*="st-key-grid_card_"] .gc.strong { font-weight: 700; color: var(--ai-ink); }
-[class*="st-key-grid_card_"] .src { display: inline-block; white-space: nowrap; font-size: .66rem; font-weight: 800; letter-spacing: .06em; padding: 3px 7px; border-radius: 6px; background: #e8eef7; color: var(--ai-navy); }
-[class*="st-key-grid_card_"] .src.AC { background: #e0f2fe; color: #075985; }
-[class*="st-key-grid_card_"] .src.TW { background: #dcfce7; color: #166534; }
-[class*="st-key-grid_card_"] .src.HW { background: #fef3c7; color: #92400e; }
-[class*="st-key-grid_card_"] .src.MWC { background: #f3e8ff; color: #6b21a8; }
-[class*="st-key-grid_card_"] .src.BL { background: #ffe4e6; color: #9f1239; }
+.src { display: inline-block; white-space: nowrap; font-size: .66rem; font-weight: 800; letter-spacing: .06em; padding: 3px 7px; border-radius: 6px; background: #e8eef7; color: var(--ai-navy); }
+.src.AC { background: #e0f2fe; color: #075985; }
+.src.TW { background: #dcfce7; color: #166534; }
+.src.HW { background: #fef3c7; color: #92400e; }
+.src.MWC { background: #f3e8ff; color: #6b21a8; }
+.src.BL { background: #ffe4e6; color: #9f1239; }
+.src.ADC { background: #e2e8f0; color: #1e293b; }
 [class*="st-key-grid_card_"] .pill { display: inline-block; font-size: .74rem; font-weight: 700; padding: 5px 10px; border-radius: 6px; background: #eef2f7; color: var(--ai-navy); text-decoration: none; white-space: nowrap; }
 [class*="st-key-grid_card_"] .pill:hover { background: var(--ai-navy); color: #fff; text-decoration: none; }
 [class*="st-key-grid_card_"] .links { white-space: nowrap; }
@@ -171,6 +173,44 @@ a:hover { text-decoration: underline; }
 
 /* Tabs */
 [data-testid="stTabs"] button { font-weight: 600; font-size: .86rem; }
+
+/* ---------- Phone field-mode cards ---------- */
+[class*="st-key-pcard_"] { margin-bottom: 10px; }
+[class*="st-key-pcard_"] > div, [class*="st-key-pcard_"] { padding: .55rem .7rem !important; }
+[class*="st-key-pcard_"] [data-testid="stHorizontalBlock"]:first-of-type { align-items: start !important; }
+[class*="st-key-pcard_"] [data-testid="stHorizontalBlock"] { gap: .5rem !important; align-items: end !important; flex-wrap: nowrap !important; flex-direction: row !important; }
+[class*="st-key-pcard_"] [data-testid="stHorizontalBlock"] > div { flex: 1 1 0 !important; width: auto !important; min-width: 0 !important; }
+[class*="st-key-pcard_"] [data-testid="stHorizontalBlock"] > div:has(> div > div > .stButton) { flex: 0 0 52px !important; }
+[class*="st-key-pcard_"] div.stButton > button { min-height: 44px; }
+[class*="st-key-pcard_"] .pc-head { padding-bottom: 4px; }
+[class*="st-key-pcard_"] .element-container { margin-bottom: 0 !important; }
+[class*="st-key-pcard_"] label[data-testid="stWidgetLabel"] p { font-size: .62rem !important; }
+[class*="st-key-pcard_"] div[data-testid="stTextInput"] input { min-height: 40px; font-size: 16px !important; }
+.pc-top { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.pc-time { font-size: 1.05rem; font-weight: 800; color: var(--ai-navy); font-variant-numeric: tabular-nums; }
+.pc-county { font-size: .76rem; color: var(--ai-muted); font-weight: 600; }
+.pc-addr { font-size: 1.02rem; font-weight: 700; color: var(--ai-ink); line-height: 1.25; margin: 4px 0 2px 0; }
+.pc-meta { font-size: .8rem; color: var(--ai-muted); }
+.pc-meta b { color: var(--ai-ink-2); font-weight: 700; }
+.pc-bids { display: flex; gap: 8px; margin: 8px 0 4px 0; }
+.pc-bids > div { flex: 1; background: #f1f5f9; border-radius: 8px; padding: 6px 8px; display: flex; flex-direction: column; }
+.pc-bids .k { font-size: .6rem; font-weight: 700; letter-spacing: .08em; color: var(--ai-muted); }
+.pc-bids .v { font-size: 1.02rem; font-weight: 800; color: var(--ai-ink); font-variant-numeric: tabular-nums; }
+.pc-bids > div:first-child { background: var(--ai-navy); }
+.pc-bids > div:first-child .k { color: #cbd5e1; }
+.pc-bids > div:first-child .v { color: #fff; }
+.pill { display: inline-block; font-size: .74rem; font-weight: 700; padding: 5px 10px; border-radius: 6px; background: #eef2f7; color: var(--ai-navy); text-decoration: none; white-space: nowrap; }
+.pill:hover { background: var(--ai-navy); color: #fff; text-decoration: none; }
+.pill.wide { display: block; text-align: center; padding: 11px 6px; font-size: .84rem; }
+.day-header.phone { position: sticky; top: 0; z-index: 5; margin: 10px 0 8px 0; }
+[class*="st-key-ad_"] div.stButton > button { background: #eef2f7 !important; color: var(--ai-navy) !important; border: 0 !important; font-weight: 700 !important; padding: 0 4px !important; min-width: 0 !important; }
+[class*="st-key-ad_"] div.stButton > button:hover { background: var(--ai-navy) !important; color: #fff !important; }
+[data-testid="stPopover"] button { border-radius: 8px !important; min-height: 34px; padding: 0 10px !important; background: #eef2f7 !important; border: 0 !important; }
+[data-testid="stPopover"] button p, [data-testid="stPopover"] button div, [data-testid="stPopover"] button span { color: var(--ai-navy) !important; font-weight: 700 !important; font-size: .78rem !important; }
+[data-testid="stPopover"] button svg { fill: var(--ai-navy) !important; }
+[data-testid="stPopoverBody"] { max-width: min(92vw, 720px); }
+.ad-body { font-size: .82rem; line-height: 1.45; color: var(--ai-ink-2); max-height: 70vh; overflow: auto; }
+.ad-body table { max-width: 100%; }
 
 /* ---------- Phone / narrow ---------- */
 @media (max-width: 900px) {
@@ -202,7 +242,8 @@ a:hover { text-decoration: underline; }
 SCRAPED_DIR.mkdir(parents=True, exist_ok=True)
 EXPORT_DIR.mkdir(parents=True, exist_ok=True)
 layout_defaults = load_layout_defaults()
-AUCTION_HOUSES = ["AC", "TW", "HW", "MWC", "BL"]
+AUCTION_HOUSES = ["AC", "TW", "HW", "MWC", "BL", "ADC"]
+SOURCE_NAMES = {"AC": "Alex Cooper", "TW": "Tidewater", "HW": "Harvey West", "MWC": "McCabe Weisberg", "BL": "A. J. Billig", "ADC": "Auction.com"}
 DEFAULT_COUNTY_FILTER = ["Montgomery County", "Prince George's County", "Howard County", "Frederick County", "Anne Arundel County", "Washington, DC"]
 
 def default_value(key, fallback):
@@ -298,7 +339,7 @@ def load_data(path_strings, mtimes):
 def clean_external_url(raw, auctioneer=""):
     """Return a real ad URL only. Suppresses Google search/map links and unwraps Google redirects."""
     url = str(raw or "").strip()
-    if not url or url.lower() in {"nan", "none", "#"} or url.startswith("javascript:"):
+    if not url or url.lower() in {"nan", "none", "#"} or url.startswith("javascript:") or url.startswith("tw-ad:"):
         return ""
     if url.startswith("//"):
         url = "https:" + url
@@ -309,6 +350,7 @@ def clean_external_url(raw, auctioneer=""):
             "HW": "https://www.hwestauctions.com",
             "MWC": "https://apps.mwc-law.com",
             "BL": "https://ajbillig.com",
+            "ADC": "https://www.auction.com",
         }
         base = base_by_auctioneer.get(str(auctioneer or "").upper(), "")
         url = base + url if base else ""
@@ -527,7 +569,7 @@ def build_save_df(df, multiplier, sale_net, close1, close2):
 
 st.markdown('<div class="app-brand"><span class="badge">SIMO HOMES</span><span class="env">Maryland / DC foreclosure auctions</span></div>', unsafe_allow_html=True)
 st.title("Auction Intelligence")
-st.caption("Sources: Alex Cooper (AC) · Tidewater (TW) · Harvey West (HW) · McCabe Weisberg (MWC) · A. J. Billig (BL)")
+st.caption("Sources: Alex Cooper (AC) · Tidewater (TW) · Harvey West (HW) · McCabe Weisberg (MWC) · A. J. Billig (BL) · Auction.com in-person (ADC)")
 
 
 def persist_user_state_before_refresh():
@@ -567,6 +609,8 @@ with st.sidebar:
         persist_user_state_before_refresh(); st.session_state.last_scrape = scrape_many(["MWC"], clear_old=False); st.cache_data.clear(); st.session_state.pop("loaded_ids", None); st.rerun()
     if st.button("Scrape BL (Howard Co. + more)", use_container_width=True):
         persist_user_state_before_refresh(); st.session_state.last_scrape = scrape_many(["BL"], clear_old=False); st.cache_data.clear(); st.session_state.pop("loaded_ids", None); st.rerun()
+    if st.button("Scrape ADC (Auction.com)", use_container_width=True):
+        persist_user_state_before_refresh(); st.session_state.last_scrape = scrape_many(["ADC"], clear_old=False); st.cache_data.clear(); st.session_state.pop("loaded_ids", None); st.rerun()
 
     if st.button("Full Refresh Selected", type="primary", use_container_width=True):
         persist_user_state_before_refresh(); st.session_state.last_scrape = scrape_many(selected, clear_old=True); st.cache_data.clear(); st.session_state.pop("loaded_ids", None); st.rerun()
@@ -648,6 +692,31 @@ df = merge_bids(raw, bids) if not raw.empty else raw
 if not df.empty:
     df["County"] = df["County"].apply(lambda x: x if x in MD_COUNTIES else "Unknown County")
 
+def _loose_addr_key(addr):
+    """Street number + first real street word + zip. Catches the same property listed by
+    two sources with slightly different formatting (e.g. '5865E BONIWOOD TURN' vs '5865 E Boniwood Turn')."""
+    a = str(addr or "").upper()
+    num = re.match(r"\s*(\d+)", a)
+    num = num.group(1) if num else ""
+    words = [w for w in re.findall(r"[A-Z]+", a.split(",")[0]) if w not in {"E", "W", "N", "S", "NE", "NW", "SE", "SW", "UNIT", "APT", "STE"}]
+    zipm = re.search(r"\b(\d{5})(?:-\d{4})?\s*$", a)
+    return (num + "|" + (words[0] if words else "") + "|" + (zipm.group(1) if zipm else "")) if num else a
+
+def dedupe_across_sources(frame):
+    """One row per property across ALL sources. Prefer the auctioneer that actually runs
+    the sale (AC/TW/HW/MWC/BL) over a listing-only source (ADC), then prefer rows with an ad."""
+    if frame.empty or "Address" not in frame:
+        return frame
+    pref = {"ADC": 9}
+    f = frame.copy()
+    f["_lk"] = f["Address"].apply(_loose_addr_key)
+    f["_rank"] = f["Auctioneer"].map(lambda x: pref.get(str(x).upper(), 0)) + f["Ad Link"].apply(lambda x: 0 if str(x or "").strip() and str(x).lower() not in {"nan", "none"} else 1)
+    f = f.sort_values(["_lk", "_rank"]).drop_duplicates("_lk", keep="first")
+    return f.drop(columns=["_lk", "_rank"])
+
+if not df.empty:
+    df = dedupe_across_sources(df)
+
 # Favorite properties are user preferences, not scrape data. Keep them
 # separate so refreshes cannot wipe them.
 favorite_properties = load_favorite_properties()
@@ -668,8 +737,75 @@ if hide_blocked:
     if blocked_set:
         df = df[~df["Address"].apply(lambda x: city_from_address(x) in blocked_set)]
 
-st.subheader("Filters")
-filters_card = st.container(border=True)
+
+# ---------------------------------------------------------------------------
+# Phone / field mode. Default comes from the browser's User-Agent (st.context.headers),
+# ?view=phone|desktop overrides it (bookmark /?view=phone on the iPhone), and the
+# sidebar / top toggle lets Sam switch any time.
+# ---------------------------------------------------------------------------
+def _ua_is_mobile():
+    try:
+        ua = str(st.context.headers.get("User-Agent", "") or "")
+    except Exception:
+        ua = ""
+    return bool(re.search(r"iPhone|Android.*Mobile|Mobile Safari|iPod|Windows Phone", ua, re.I))
+
+_qp_view = str(st.query_params.get("view", "") or "").lower()
+if _qp_view in {"phone", "desktop"}:
+    st.session_state["view_mode"] = _qp_view
+elif "view_mode" not in st.session_state:
+    st.session_state["view_mode"] = "phone" if _ua_is_mobile() else "desktop"
+PHONE = st.session_state["view_mode"] == "phone"
+
+with st.sidebar:
+    st.divider()
+    st.header("Layout")
+    _vm = st.radio("Layout", ["Desktop grid", "Phone cards"], index={"desktop": 0, "phone": 1}[st.session_state["view_mode"]], horizontal=True, key="view_mode_radio", label_visibility="collapsed")
+    _new_mode = {"Desktop grid": "desktop", "Phone cards": "phone"}[_vm]
+    if _new_mode != st.session_state["view_mode"]:
+        st.session_state["view_mode"] = _new_mode
+        st.query_params["view"] = _new_mode
+        st.rerun()
+
+def tw_ad_html(link):
+    """Return cached Tidewater ad HTML for a 'tw-ad:<id>' link, or ''."""
+    try:
+        ad_id = str(link).split(":", 1)[1].strip()
+        path = SCRAPED_DIR / "ads" / f"TW_{ad_id}.html"
+        if path.exists():
+            return path.read_text(encoding="utf-8", errors="ignore")
+    except Exception:
+        pass
+    return ""
+
+@st.dialog("Legal ad", width="large")
+def show_ad_dialog(html):
+    st.markdown('<div class="ad-body">' + html + "</div>", unsafe_allow_html=True)
+
+def render_ad_control(container, raw_link, auctioneer, aid, label="Ad", compact=True):
+    """Ad button: external link pill for real URLs; in-app viewer for Tidewater (tw-ad:)."""
+    raw = str(raw_link or "").strip()
+    if raw.startswith("tw-ad:"):
+        html = tw_ad_html(raw)
+        if html:
+            if container.button(label, key=safe_key("ad", aid), use_container_width=True, help="View Tidewater legal ad"):
+                show_ad_dialog(html)
+            return True
+        container.markdown(_cell("—", "muted"), unsafe_allow_html=True)
+        return False
+    link = clean_external_url(raw, auctioneer)
+    if link:
+        container.markdown(f'<a class="pill{"" if compact else " wide"}" href="{link}" target="_blank" rel="noopener noreferrer">{label} ↗</a>', unsafe_allow_html=True)
+        return True
+    container.markdown(_cell("—", "muted"), unsafe_allow_html=True)
+    return False
+
+def _cell(html, cls=""):
+    return f'<div class="gc {cls}">{html}</div>'
+
+# ---------------------------------------------------------------------------
+# Filters
+# ---------------------------------------------------------------------------
 for _lk, _lv in {
     "auctioneer_grid_filter": default_value("auctioneer_grid_filter", []),
     "county_grid_filter": default_value("county_grid_filter", DEFAULT_COUNTY_FILTER),
@@ -677,18 +813,26 @@ for _lk, _lv in {
 }.items():
     if _lk not in st.session_state:
         st.session_state[_lk] = _lv
-with filters_card:
-    f1, f2, f3, f4 = st.columns([1, 1.6, 1.8, 1.2])
-auctioneer_filter = f1.multiselect("Auctioneer", sorted(df["Auctioneer"].dropna().unique()), key="auctioneer_grid_filter")
 county_values = set(df["County"].dropna().astype(str))
 county_options = [c for c in MD_COUNTIES if c in county_values]
-# First launch defaults to Sam's target counties. Saved layout overrides this.
 county_default = [c for c in default_value("county_grid_filter", DEFAULT_COUNTY_FILTER) if c in county_options]
 if "county_grid_filter" not in st.session_state:
     st.session_state["county_grid_filter"] = county_default
-county_filter = f2.multiselect("County", county_options, key="county_grid_filter")
-search = f3.text_input("Search", key="search_grid_filter")
-date_view = f4.radio("Date view", ["Current auction week", "All future", "All dates"], horizontal=False, key="date_view_filter")
+
+if PHONE:
+    with st.expander("Filters", expanded=False):
+        search = st.text_input("Search", key="search_grid_filter", placeholder="Address, city, county…")
+        date_view = st.radio("Date view", ["Current auction week", "All future", "All dates"], horizontal=True, key="date_view_filter")
+        county_filter = st.multiselect("County", county_options, key="county_grid_filter")
+        auctioneer_filter = st.multiselect("Auctioneer", sorted(df["Auctioneer"].dropna().unique()), key="auctioneer_grid_filter")
+else:
+    st.subheader("Filters")
+    with st.container(border=True):
+        f1, f2, f3, f4 = st.columns([1, 1.6, 1.8, 1.2])
+        auctioneer_filter = f1.multiselect("Auctioneer", sorted(df["Auctioneer"].dropna().unique()), key="auctioneer_grid_filter")
+        county_filter = f2.multiselect("County", county_options, key="county_grid_filter")
+        search = f3.text_input("Search", key="search_grid_filter")
+        date_view = f4.radio("Date view", ["Current auction week", "All future", "All dates"], horizontal=False, key="date_view_filter")
 
 filtered = df.copy()
 if auctioneer_filter:
@@ -724,27 +868,40 @@ if not visible_save.empty:
     combined = combined.sort_values("Saved At").drop_duplicates("Auction ID", keep="last")
     save_bids(combined)
 
-st.subheader("Actions")
-top1, top2, top3, top4 = st.columns([1,1,1,3])
-if top1.button("Save Bids", type="primary", use_container_width=True):
-    save_bids(pd.concat([load_bids(), visible_save], ignore_index=True).sort_values("Saved At").drop_duplicates("Auction ID", keep="last"))
-    st.success("Saved")
+# ---------------------------------------------------------------------------
+# Actions
+# ---------------------------------------------------------------------------
+if PHONE:
+    with st.expander("Save / Export / Backup", expanded=False):
+        if st.button("Save Bids", type="primary", use_container_width=True):
+            save_bids(pd.concat([load_bids(), visible_save], ignore_index=True).sort_values("Saved At").drop_duplicates("Auction ID", keep="last"))
+            st.success("Saved")
+        st.download_button("Export Excel", data=excel_bytes(visible_save, sale_net, close1, close2), file_name="auction_intelligence.xlsx", use_container_width=True)
+        st.download_button("Backup Archive", data=load_bids().to_csv(index=False), file_name="auction_archive_backup.csv", mime="text/csv", use_container_width=True)
+else:
+    st.subheader("Actions")
+    top1, top2, top3, top4 = st.columns([1,1,1,3])
+    if top1.button("Save Bids", type="primary", use_container_width=True):
+        save_bids(pd.concat([load_bids(), visible_save], ignore_index=True).sort_values("Saved At").drop_duplicates("Auction ID", keep="last"))
+        st.success("Saved")
+    top2.download_button("Export Excel", data=excel_bytes(visible_save, sale_net, close1, close2), file_name="auction_intelligence.xlsx", use_container_width=True)
+    current_archive_csv = load_bids().to_csv(index=False)
+    top3.download_button("Backup Archive", data=current_archive_csv, file_name="auction_archive_backup.csv", mime="text/csv", use_container_width=True)
+    with top4.expander("Restore archive from backup CSV"):
+        restore_file = st.file_uploader("Upload auction_archive_backup.csv", type=["csv"], key="restore_archive_csv")
+        if restore_file is not None and st.button("Restore Archive", type="primary"):
+            try:
+                restored = pd.read_csv(restore_file)
+                save_bids(pd.concat([load_bids(), restored], ignore_index=True).sort_values("Saved At").drop_duplicates("Auction ID", keep="last"))
+                st.success("Archive restored and saved.")
+                st.rerun()
+            except Exception as e:
+                st.error(f"Could not restore CSV: {e}")
 
-top2.download_button("Export Excel", data=excel_bytes(visible_save, sale_net, close1, close2), file_name="auction_intelligence.xlsx", use_container_width=True)
-current_archive_csv = load_bids().to_csv(index=False)
-top3.download_button("Backup Archive", data=current_archive_csv, file_name="auction_archive_backup.csv", mime="text/csv", use_container_width=True)
-with top4.expander("Restore archive from backup CSV"):
-    restore_file = st.file_uploader("Upload auction_archive_backup.csv", type=["csv"], key="restore_archive_csv")
-    if restore_file is not None and st.button("Restore Archive", type="primary"):
-        try:
-            restored = pd.read_csv(restore_file)
-            save_bids(pd.concat([load_bids(), restored], ignore_index=True).sort_values("Saved At").drop_duplicates("Auction ID", keep="last"))
-            st.success("Archive restored and saved.")
-            st.rerun()
-        except Exception as e:
-            st.error(f"Could not restore CSV: {e}")
-
-st.subheader("Auction Grid")
+# ---------------------------------------------------------------------------
+# Auction grid / cards
+# ---------------------------------------------------------------------------
+st.subheader("Auction Grid" if not PHONE else "Auctions")
 if date_view == "Current auction week":
     a, b = this_or_next_week()
     st.caption(f"Auction week {a.strftime('%b %d')} – {b.strftime('%b %d, %Y')} · {len(filtered)} active sale{'s' if len(filtered) != 1 else ''}. Comp / Rehab / Profit are in thousands.")
@@ -753,15 +910,77 @@ else:
 
 filtered["_Date"] = pd.to_datetime(filtered["Sale Date & Time"], errors="coerce").dt.date
 
-def _cell(html, cls=""):
-    return f'<div class="gc {cls}">{html}</div>'
+def _to_int(v):
+    try:
+        txt = str(v or "").replace(",", "").strip()
+        return int(float(txt)) if txt else 0
+    except Exception:
+        return 0
+
+def row_numbers(aid):
+    comp = _to_int(st.session_state.get(safe_key("comp", aid), ""))
+    rehab = _to_int(st.session_state.get(safe_key("rehab", aid), ""))
+    profit = _to_int(st.session_state.get(safe_key("profit", aid), ""))
+    maxb, bidpct, maxs = calc_bid(comp, rehab, profit, sale_net, close1, close2, multiplier)
+    return comp, rehab, profit, maxb, bidpct, maxs
+
+def render_phone_card(r, gi):
+    aid = str(r["Auction ID"])
+    dt = pd.to_datetime(r["Sale Date & Time"], errors="coerce")
+    time_txt = "" if pd.isna(dt) else dt.strftime("%I:%M %p").lstrip("0")
+    src = str(r["Auctioneer"]).upper()
+    is_fav = aid in favorite_properties
+    county_txt = str(r["County"]).replace(" County", "")
+    with st.container(border=True, key=f"pcard_{aid}"):
+        h1, h2 = st.columns([6, 1])
+        h1.markdown(
+            f'<div class="pc-head"><div class="pc-top"><span class="pc-time">{time_txt or "Time TBD"}</span>'
+            f'<span class="src {src}">{src}</span><span class="pc-county">{county_txt}</span></div>'
+            f'<div class="pc-addr">{r["Address"]}</div>'
+            f'<div class="pc-meta">Deposit <b>{r["Deposit"]}</b>'
+            + (f' · <b>{r.get("Occupancy","")}</b>' if str(r.get("Occupancy","") or "").strip() else "")
+            + '</div></div>',
+            unsafe_allow_html=True,
+        )
+        if h2.button("", icon=":material/star:" if is_fav else ":material/star_outline:", key=safe_key("fav", aid), type="primary" if is_fav else "secondary", use_container_width=True):
+            toggle_favorite_property(aid)
+            st.rerun()
+
+        i1, i2, i3 = st.columns(3)
+        i1.text_input("Comp (k)", key=safe_key("comp", aid), placeholder="Comp")
+        i2.text_input("Rehab (k)", key=safe_key("rehab", aid), placeholder="Rehab")
+        i3.text_input("Profit (k)", key=safe_key("profit", aid), placeholder="Profit")
+        comp, rehab, profit, maxb, bidpct, maxs = row_numbers(aid)
+        st.markdown(
+            f'<div class="pc-bids"><div><span class="k">MAX BID</span><span class="v">{money(maxb) or "—"}</span></div>'
+            f'<div><span class="k">%</span><span class="v">{pct(bidpct) or "—"}</span></div>'
+            f'<div><span class="k">MAX S</span><span class="v">{money(maxs) or "—"}</span></div></div>',
+            unsafe_allow_html=True,
+        )
+        j1, j2, j3 = st.columns([1.1, 1, 2.2])
+        j1.selectbox("Look", ["", "Y", "N", "YY", "Soso"], key=safe_key("look", aid), placeholder="Look")
+        j2.checkbox("Occupied", key=safe_key("occ", aid))
+        j3.text_input("Note", key=safe_key("note", aid), placeholder="Note")
+        b1, b2, b3, b4 = st.columns(4)
+        render_ad_control(b1, r.get("Ad Link", ""), r.get("Auctioneer", ""), aid, label="Ad", compact=False)
+        b2.markdown(f'<a class="pill wide" href="{zillow_link(r["Address"])}" target="_blank" rel="noopener noreferrer">Zillow</a>', unsafe_allow_html=True)
+        b3.markdown(f'<a class="pill wide" href="{redfin_search_link(r["Address"])}" target="_blank" rel="noopener noreferrer">Redfin</a>', unsafe_allow_html=True)
+        if b4.button("", icon=":material/visibility_off:", key=safe_key("hide", aid), help="Hide this property", use_container_width=True):
+            hide_address(r["Address"])
+            st.rerun()
 
 for gi, (d, group) in enumerate(filtered.groupby("_Date", dropna=False)):
     day_label = pd.to_datetime(d).strftime("%A, %B %d, %Y") if pd.notna(d) else "Unknown Date"
     n = len(group)
+    if PHONE:
+        st.markdown(f'<div class="day-header phone"><span class="d">{pd.to_datetime(d).strftime("%a, %b %d") if pd.notna(d) else "Unknown Date"}</span><span class="n">{n} sale{"s" if n != 1 else ""}</span></div>', unsafe_allow_html=True)
+        for _, r in group.iterrows():
+            render_phone_card(r, gi)
+        continue
+
     with st.container(border=True, key=f"grid_card_{gi}"):
         st.markdown(f'<div class="day-header"><span class="d">{day_label}</span><span class="n">{n} sale{"s" if n != 1 else ""}</span></div>', unsafe_allow_html=True)
-        widths = [.42,.88,.55,county_w,addr_w,.85,.5,.78,.72,.72,.72,.85,.55,.85,note_w,.55]
+        widths = [.42,.88,.55,county_w,addr_w,.85,.5,.78,.72,.72,.72,.85,.55,.85,note_w,.62]
         headers = ["", "Time", "Src", "County", "Address", "Dep", "Occ", "Look", "Comp", "Rehab", "Profit", "Max", "%", "MaxS", "Note", "Ad"]
         if show_ai:
             widths += [.9,.9]
@@ -792,26 +1011,16 @@ for gi, (d, group) in enumerate(filtered.groupby("_Date", dropna=False)):
             cols[4].markdown(_cell(r["Address"], "addr"), unsafe_allow_html=True)
             cols[5].markdown(_cell(r["Deposit"], "mono"), unsafe_allow_html=True)
             cols[6].checkbox("Occ", key=safe_key("occ", aid), label_visibility="collapsed")
-            cols[7].selectbox("Look", ["", "Y", "N", "YY", "Soso"], key=safe_key("look", aid), label_visibility="collapsed")
+            cols[7].selectbox("Look", ["", "Y", "N", "YY", "Soso"], key=safe_key("look", aid), label_visibility="collapsed", placeholder="—")
             cols[8].text_input("Comp", key=safe_key("comp", aid), label_visibility="collapsed", placeholder="—")
             cols[9].text_input("Rehab", key=safe_key("rehab", aid), label_visibility="collapsed", placeholder="—")
             cols[10].text_input("Profit", key=safe_key("profit", aid), label_visibility="collapsed", placeholder="—")
-            def _to_int(v):
-                try:
-                    txt = str(v or "").replace(",", "").strip()
-                    return int(float(txt)) if txt else 0
-                except Exception:
-                    return 0
-            comp = _to_int(st.session_state.get(safe_key("comp", aid), ""))
-            rehab = _to_int(st.session_state.get(safe_key("rehab", aid), ""))
-            profit = _to_int(st.session_state.get(safe_key("profit", aid), ""))
-            maxb, bidpct, maxs = calc_bid(comp, rehab, profit, sale_net, close1, close2, multiplier)
+            comp, rehab, profit, maxb, bidpct, maxs = row_numbers(aid)
             cols[11].markdown(_cell(money(maxb) or "—", "mono strong" if maxb else "mono muted"), unsafe_allow_html=True)
             cols[12].markdown(_cell(pct(bidpct) or "—", "mono" if bidpct else "mono muted"), unsafe_allow_html=True)
             cols[13].markdown(_cell(money(maxs) or "—", "mono" if maxs else "mono muted"), unsafe_allow_html=True)
             cols[14].text_input("Note", key=safe_key("note", aid), label_visibility="collapsed", placeholder="Note")
-            link = clean_external_url(r.get("Ad Link", ""), r.get("Auctioneer", ""))
-            cols[15].markdown(f'<a class="pill" href="{link}" target="_blank" rel="noopener noreferrer">Ad ↗</a>' if link else _cell("—", "muted"), unsafe_allow_html=True)
+            render_ad_control(cols[15], r.get("Ad Link", ""), r.get("Auctioneer", ""), aid)
             idx = 16
             if show_ai:
                 cols[idx].markdown(_cell(money(float(comp or 0) * multiplier) if comp else "—", "mono"), unsafe_allow_html=True)
