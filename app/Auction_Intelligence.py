@@ -31,176 +31,170 @@ st.set_page_config(page_title="Auction Intelligence", page_icon="🏛️", layou
 
 st.markdown("""
 <style>
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
+
 :root {
-  --ai-bg: #f4f7fb;
-  --ai-panel: #ffffff;
+  --ai-bg: #f5f7fb;
   --ai-card: #ffffff;
-  --ai-ink: #111827;
-  --ai-muted: #5b6678;
-  --ai-red: #ff4b4b;
-  --ai-blue: #2563eb;
-  --ai-border: #d7e0ec;
-  --ai-sidebar: #111827;
-  --ai-sidebar-2: #1e293b;
-  --ai-sidebar-field: #243244;
+  --ai-ink: #0f172a;
+  --ai-ink-2: #334155;
+  --ai-muted: #64748b;
+  --ai-line: #e2e8f0;
+  --ai-line-2: #cbd5e1;
+  --ai-navy: #1e3a5f;
+  --ai-navy-2: #16304f;
+  --ai-accent: #2563eb;
+  --ai-sidebar: #0f1b2d;
+  --ai-sidebar-2: #152a44;
+  --ai-radius: 10px;
 }
-html, body, [data-testid="stAppViewContainer"] {
-  background: linear-gradient(180deg, #f8fbff 0%, #eef4fb 100%) !important;
+
+html, body, [data-testid="stAppViewContainer"], .stApp {
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif !important;
+  background: var(--ai-bg) !important;
   color: var(--ai-ink);
 }
-.block-container {max-width: 1900px; padding-top: 1.25rem; padding-left: 1.5rem; padding-right: 1.5rem;}
+[data-testid="stAppViewContainer"] *:not([data-testid="stIconMaterial"]):not(.material-symbols-rounded) { font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; }
+[data-testid="stIconMaterial"], .material-symbols-rounded { font-family: 'Material Symbols Rounded' !important; }
 
-/* Dark modern sidebar */
-[data-testid="stSidebar"] {background: linear-gradient(180deg, var(--ai-sidebar) 0%, var(--ai-sidebar-2) 100%) !important;}
-[data-testid="stSidebar"] h1, [data-testid="stSidebar"] h2, [data-testid="stSidebar"] h3,
-[data-testid="stSidebar"] label, [data-testid="stSidebar"] p, [data-testid="stSidebar"] span {color: #f8fafc !important;}
-[data-testid="stSidebar"] .small, [data-testid="stSidebar"] .stMarkdown p {color: #cbd5e1 !important;}
-[data-testid="stSidebar"] hr {border-color: rgba(255,255,255,.14);}
+/* Hide Streamlit chrome (toolbar, hamburger, footer) for a product look */
+[data-testid="stToolbar"], #MainMenu, footer, [data-testid="stDecoration"] { display: none !important; }
+header[data-testid="stHeader"] { background: transparent !important; height: 0 !important; }
+.block-container { max-width: 1900px; padding: 1.4rem 2rem 3rem 2rem; }
+
+/* ---------- Sidebar ---------- */
+[data-testid="stSidebar"] { background: linear-gradient(180deg, var(--ai-sidebar) 0%, var(--ai-sidebar-2) 100%) !important; border-right: 1px solid rgba(255,255,255,.06); }
+[data-testid="stSidebar"] > div:first-child { padding-top: 1.2rem; }
+[data-testid="stSidebar"] h1, [data-testid="stSidebar"] h2, [data-testid="stSidebar"] h3 {
+  color: #94a3b8 !important; font-size: .7rem !important; font-weight: 700 !important;
+  letter-spacing: .12em; text-transform: uppercase; margin: .2rem 0 .6rem 0 !important; padding: 0 !important;
+}
+[data-testid="stSidebar"] label, [data-testid="stSidebar"] label p, [data-testid="stSidebar"] label span,
+[data-testid="stSidebar"] p, [data-testid="stSidebar"] span { color: #e2e8f0 !important; -webkit-text-fill-color: #e2e8f0 !important; opacity: 1 !important; }
+[data-testid="stSidebar"] label, [data-testid="stSidebar"] label p { font-size: .82rem !important; font-weight: 500 !important; }
+[data-testid="stSidebar"] .stCaptionContainer, [data-testid="stSidebar"] .stCaptionContainer p { color: #7c8ba1 !important; -webkit-text-fill-color: #7c8ba1 !important; font-size: .74rem !important; }
+[data-testid="stSidebar"] hr { border-color: rgba(255,255,255,.08); margin: 1.1rem 0; }
 [data-testid="stSidebar"] div[data-baseweb="select"] > div,
 [data-testid="stSidebar"] textarea,
 [data-testid="stSidebar"] input {
-  background: var(--ai-sidebar-field) !important;
-  color: #f8fafc !important;
-  border: 1px solid rgba(255,255,255,.16) !important;
-  border-radius: 11px !important;
+  background: rgba(255,255,255,.06) !important; color: #f8fafc !important;
+  border: 1px solid rgba(255,255,255,.12) !important; border-radius: 8px !important;
 }
-[data-testid="stSidebar"] textarea::placeholder,
-[data-testid="stSidebar"] input::placeholder {color: #94a3b8 !important;}
-[data-testid="stSidebar"] div[data-baseweb="select"] svg {fill: #e5e7eb !important;}
+[data-testid="stSidebar"] div[data-baseweb="select"] svg { fill: #cbd5e1 !important; }
+[data-testid="stSidebar"] div[data-baseweb="tag"] { background: rgba(255,255,255,.14) !important; border-radius: 6px !important; }
+[data-testid="stSidebar"] div[data-baseweb="tag"] span { color: #f8fafc !important; -webkit-text-fill-color: #f8fafc !important; font-weight: 600; font-size: .74rem; }
 [data-testid="stSidebar"] div.stButton > button {
-  background: #243244 !important;
-  color: #f8fafc !important;
-  border: 1px solid rgba(255,255,255,.20) !important;
-  border-radius: 11px !important;
-  font-weight: 700 !important;
+  background: rgba(255,255,255,.06) !important; color: #e2e8f0 !important;
+  border: 1px solid rgba(255,255,255,.14) !important; border-radius: 8px !important;
+  font-weight: 600 !important; font-size: .8rem !important; min-height: 38px; padding: 0 6px !important;
 }
-[data-testid="stSidebar"] div.stButton > button:hover {
-  background: #334155 !important;
-  border-color: rgba(255,255,255,.34) !important;
-}
-[data-testid="stSidebar"] div.stButton > button[kind="primary"] {
-  background: linear-gradient(135deg,#ff4b4b,#ef4444) !important;
-  color: #ffffff !important;
-  border: 0 !important;
-}
+[data-testid="stSidebar"] div.stButton > button:hover { background: rgba(255,255,255,.12) !important; border-color: rgba(255,255,255,.28) !important; }
+[data-testid="stSidebar"] div.stButton > button[kind="primary"] { background: var(--ai-accent) !important; color: #fff !important; border: 0 !important; }
+[data-testid="stSidebar"] div.stButton > button[kind="primary"]:hover { background: #1d4ed8 !important; }
+[data-testid="stSidebar"] div[data-testid="stNumberInput"] input { background: #ffffff !important; color: var(--ai-ink) !important; -webkit-text-fill-color: var(--ai-ink) !important; }
+[data-testid="stSidebar"] div[data-testid="stNumberInput"] button { background: #ffffff !important; color: var(--ai-ink) !important; border-color: #d1d5db !important; }
+[data-testid="stSidebar"] div[data-testid="stNumberInput"] button svg { fill: var(--ai-ink) !important; }
+[data-testid="stSidebar"] .stAlert { border-radius: 8px; }
 
-/* Strong readable sidebar field labels */
-[data-testid="stSidebar"] label,
-[data-testid="stSidebar"] label p,
-[data-testid="stSidebar"] label span,
-[data-testid="stSidebar"] .stNumberInput label,
-[data-testid="stSidebar"] .stTextArea label,
-[data-testid="stSidebar"] .stMultiSelect label {
-  color: #f8fafc !important;
-  -webkit-text-fill-color: #f8fafc !important;
-  opacity: 1 !important;
-  font-weight: 700 !important;
-}
-[data-testid="stSidebar"] .stCaptionContainer,
-[data-testid="stSidebar"] .stCaptionContainer p {
-  color: #cbd5e1 !important;
-  opacity: 1 !important;
-}
+/* ---------- Header ---------- */
+.app-brand { display: flex; align-items: center; gap: 10px; margin: 0 0 6px 0; }
+.app-brand .badge { background: var(--ai-navy); color: #fff; font-size: .66rem; font-weight: 800; letter-spacing: .12em; padding: 5px 11px; border-radius: 999px; }
+.app-brand .env { color: var(--ai-muted); font-size: .72rem; font-weight: 500; }
+h1 { font-size: 1.85rem !important; font-weight: 800 !important; letter-spacing: -0.03em; color: var(--ai-ink) !important; margin: 0 !important; padding: 0 !important; line-height: 1.15 !important; }
+[data-testid="stCaptionContainer"] p { color: var(--ai-muted); font-size: .82rem; }
 
+/* Section labels (st.subheader) */
+h3 { font-size: .72rem !important; font-weight: 700 !important; letter-spacing: .12em; text-transform: uppercase; color: var(--ai-muted) !important; margin: 1.4rem 0 .5rem 0 !important; padding: 0 !important; }
+h2 { font-size: 1.05rem !important; font-weight: 700 !important; color: var(--ai-ink) !important; }
 
-/* Fix Streamlit number inputs in dark sidebar: prevent white text on white boxes */
-[data-testid="stSidebar"] div[data-testid="stNumberInput"] input,
-[data-testid="stSidebar"] div[data-testid="stNumberInput"] input[type="number"],
-[data-testid="stSidebar"] div[data-testid="stNumberInput"] [role="spinbutton"] {
-  background: #ffffff !important;
-  color: #111827 !important;
-  -webkit-text-fill-color: #111827 !important;
-  opacity: 1 !important;
-  caret-color: #111827 !important;
-}
-[data-testid="stSidebar"] div[data-testid="stNumberInput"] input::placeholder {
-  color: #6b7280 !important;
-  -webkit-text-fill-color: #6b7280 !important;
-  opacity: 1 !important;
-}
-[data-testid="stSidebar"] div[data-testid="stNumberInput"] button,
-[data-testid="stSidebar"] div[data-testid="stNumberInput"] button[kind],
-[data-testid="stSidebar"] div[data-testid="stNumberInput"] [data-testid="stNumberInputStepDown"],
-[data-testid="stSidebar"] div[data-testid="stNumberInput"] [data-testid="stNumberInputStepUp"] {
-  background: #ffffff !important;
-  color: #111827 !important;
-  border-color: #d1d5db !important;
-  opacity: 1 !important;
-}
-[data-testid="stSidebar"] div[data-testid="stNumberInput"] button svg {
-  fill: #111827 !important;
-  color: #111827 !important;
-}
-/* Keep the number-input label readable on the dark sidebar.
-   Do NOT force every div/span inside stNumberInput to dark; that made labels invisible. */
-[data-testid="stSidebar"] div[data-testid="stNumberInput"] label,
-[data-testid="stSidebar"] div[data-testid="stNumberInput"] label p,
-[data-testid="stSidebar"] div[data-testid="stNumberInput"] label span {
-  color: #f8fafc !important;
-  -webkit-text-fill-color: #f8fafc !important;
-  opacity: 1 !important;
-  font-weight: 700 !important;
-}
+/* Cards (st.container(border=True)) */
+[data-testid="stVerticalBlockBorderWrapper"] { background: var(--ai-card); border: 1px solid var(--ai-line) !important; border-radius: var(--ai-radius) !important; box-shadow: 0 1px 2px rgba(15,23,42,.04), 0 6px 18px -12px rgba(15,23,42,.18); }
+[data-testid="stVerticalBlockBorderWrapper"] > div { padding: .9rem 1.1rem !important; }
 
-/* Main area */
-h1 {letter-spacing: -0.03em; color:#111827;}
-h2, h3 {color:#172033;}
-.date-header {border-top:4px solid #111827; background:linear-gradient(90deg,#e8f1ff 0%,#ffffff 100%); padding:11px 14px; margin-top:24px; font-weight:800; border-radius: 12px 12px 0 0; box-shadow: 0 1px 0 rgba(17,24,39,.08);}
-.small {color:var(--ai-muted); font-size:.85rem;}
-
-/* Main inputs, cleaner and less gray */
-div[data-testid="stTextInput"] input,
-div[data-testid="stNumberInput"] input,
-div[data-baseweb="select"] > div {
-  background: #ffffff !important;
-  border: 1px solid var(--ai-border) !important;
-  border-radius: 11px !important;
-  box-shadow: 0 1px 2px rgba(16,24,40,.04) !important;
+/* ---------- Inputs ---------- */
+div[data-testid="stTextInput"] input, div[data-testid="stNumberInput"] input, div[data-baseweb="select"] > div, div[data-baseweb="base-input"] {
+  background: #ffffff !important; border: 1px solid var(--ai-line-2) !important; border-radius: 8px !important; box-shadow: none !important; color: var(--ai-ink) !important; font-size: .88rem !important;
 }
-div[data-testid="stTextInput"] input:focus,
-div[data-testid="stNumberInput"] input:focus {
-  background:#ffffff !important;
-  border-color:#93c5fd !important;
-  box-shadow:0 0 0 3px rgba(37,99,235,.11) !important;
+div[data-testid="stTextInput"] input:focus, div[data-baseweb="select"] > div:focus-within { border-color: var(--ai-accent) !important; box-shadow: 0 0 0 3px rgba(37,99,235,.14) !important; }
+div[data-baseweb="tag"] { background: #e8eef7 !important; border-radius: 6px !important; }
+div[data-baseweb="tag"] span { color: var(--ai-navy) !important; font-weight: 600; font-size: .76rem; }
+div[data-baseweb="tag"] svg { fill: var(--ai-navy) !important; }
+label[data-testid="stWidgetLabel"] p { font-size: .72rem !important; font-weight: 600 !important; letter-spacing: .04em; text-transform: uppercase; color: var(--ai-muted) !important; }
+[data-testid="stRadio"] label p { text-transform: none; letter-spacing: 0; font-size: .86rem !important; font-weight: 500 !important; color: var(--ai-ink-2) !important; }
+[data-testid="stRadio"] [data-testid="stWidgetLabel"] p { font-size: .72rem !important; font-weight: 600 !important; letter-spacing: .04em; text-transform: uppercase; color: var(--ai-muted) !important; }
+[data-testid="stExpander"] { border: 1px solid var(--ai-line) !important; border-radius: 8px !important; background: #fff; }
+[data-testid="stExpander"] summary { font-size: .86rem; font-weight: 600; color: var(--ai-ink-2); }
+
+/* ---------- Buttons ---------- */
+div.stButton > button, div.stDownloadButton > button {
+  border-radius: 8px !important; font-weight: 600 !important; font-size: .86rem !important; min-height: 40px;
+  border: 1px solid var(--ai-line-2) !important; background: #ffffff !important; color: var(--ai-ink) !important; box-shadow: 0 1px 2px rgba(15,23,42,.05) !important; transition: all .12s ease;
 }
+div.stButton > button:hover, div.stDownloadButton > button:hover { border-color: var(--ai-navy) !important; color: var(--ai-navy) !important; background: #f8fafc !important; }
+div.stButton > button[kind="primary"] { background: var(--ai-navy) !important; color: #ffffff !important; border: 1px solid var(--ai-navy) !important; }
+div.stButton > button[kind="primary"]:hover { background: var(--ai-navy-2) !important; color: #fff !important; }
+div.stButton > button:focus:not(:active) { box-shadow: 0 0 0 3px rgba(37,99,235,.18) !important; }
+a { color: var(--ai-accent); font-weight: 600; text-decoration: none; }
+a:hover { text-decoration: underline; }
 
-/* Buttons */
-div.stButton > button {white-space: nowrap; min-width: 78px; border-radius:11px; border:1px solid #cbd5e1; font-weight:650; color:#111827; background:#ffffff;}
-div.stButton > button[kind="primary"], div.stDownloadButton > button {background: linear-gradient(135deg,#ff4b4b,#ef4444) !important; color:#fff !important; border:0 !important; border-radius:11px; font-weight:750; box-shadow:0 8px 18px rgba(239,68,68,.18);}
-div.stDownloadButton > button:hover, div.stButton > button[kind="primary"]:hover {filter:brightness(.97); transform: translateY(-1px);}
-div[data-testid="stHorizontalBlock"] {align-items: start;}
-.stAlert {border-radius: 12px;}
-a {color:#1d4ed8; font-weight:650; text-decoration:none;}
-a:hover {text-decoration:underline;}
+/* ---------- Auction grid ---------- */
+.day-header { display: flex; align-items: center; justify-content: space-between; background: var(--ai-navy); color: #fff; padding: 10px 14px; border-radius: 8px; margin: 2px 0 8px 0; }
+.day-header .d { font-weight: 700; font-size: .92rem; letter-spacing: -0.01em; }
+.day-header .n { font-size: .72rem; font-weight: 600; color: #cbd5e1; background: rgba(255,255,255,.1); padding: 3px 9px; border-radius: 999px; }
+[class*="st-key-grid_card_"] [data-testid="stHorizontalBlock"] { align-items: center !important; gap: .55rem !important; padding: 5px 0; border-bottom: 1px solid #eef2f7; }
+[class*="st-key-grid_card_"] [data-testid="stHorizontalBlock"]:last-child { border-bottom: 0; }
+[class*="st-key-grid_card_"] .gh { font-size: .62rem; font-weight: 700; letter-spacing: .03em; text-transform: uppercase; color: var(--ai-muted); white-space: nowrap; overflow: visible; padding: 2px 0 6px 0; }
+[class*="st-key-grid_card_"] .gc { font-size: .84rem; color: var(--ai-ink); line-height: 1.3; }
+[class*="st-key-grid_card_"] .gc.mono { font-variant-numeric: tabular-nums; white-space: nowrap; }
+[class*="st-key-grid_card_"] .gc.county { word-break: keep-all; overflow-wrap: normal; }
+[class*="st-key-grid_card_"] .gc.time { font-size: .8rem; font-variant-numeric: tabular-nums; }
+[class*="st-key-grid_card_"] .gc.muted { color: var(--ai-muted); }
+[class*="st-key-grid_card_"] .gc.addr { font-weight: 600; }
+[class*="st-key-grid_card_"] .gc.strong { font-weight: 700; color: var(--ai-ink); }
+[class*="st-key-grid_card_"] .src { display: inline-block; white-space: nowrap; font-size: .66rem; font-weight: 800; letter-spacing: .06em; padding: 3px 7px; border-radius: 6px; background: #e8eef7; color: var(--ai-navy); }
+[class*="st-key-grid_card_"] .src.AC { background: #e0f2fe; color: #075985; }
+[class*="st-key-grid_card_"] .src.TW { background: #dcfce7; color: #166534; }
+[class*="st-key-grid_card_"] .src.HW { background: #fef3c7; color: #92400e; }
+[class*="st-key-grid_card_"] .src.MWC { background: #f3e8ff; color: #6b21a8; }
+[class*="st-key-grid_card_"] .src.BL { background: #ffe4e6; color: #9f1239; }
+[class*="st-key-grid_card_"] .pill { display: inline-block; font-size: .74rem; font-weight: 700; padding: 5px 10px; border-radius: 6px; background: #eef2f7; color: var(--ai-navy); text-decoration: none; white-space: nowrap; }
+[class*="st-key-grid_card_"] .pill:hover { background: var(--ai-navy); color: #fff; text-decoration: none; }
+[class*="st-key-grid_card_"] .links { white-space: nowrap; }
+[class*="st-key-grid_card_"] .links a { display: inline-block; font-size: .72rem; font-weight: 800; padding: 4px 7px; border-radius: 6px; background: #eef2f7; color: var(--ai-navy); margin-right: 4px; }
+[class*="st-key-grid_card_"] .links a:hover { background: var(--ai-navy); color: #fff; text-decoration: none; }
+[class*="st-key-grid_card_"] div.stButton > button { min-height: 34px; padding: 0 6px; font-size: .78rem; white-space: nowrap; }
+[class*="st-key-grid_card_"] div[data-testid="stTextInput"] input { min-height: 34px; height: 34px; padding: 0 8px; font-size: .84rem !important; }
+[class*="st-key-grid_card_"] div[data-baseweb="select"] > div { min-height: 34px; font-size: .82rem !important; }
+[class*="st-key-grid_card_"] [data-testid="stCheckbox"] { margin: 0; }
+[class*="st-key-grid_card_"] [data-testid="stCheckbox"] label { padding: 0; min-height: 0; }
+[class*="st-key-grid_card_"] .element-container { margin-bottom: 0 !important; }
 
-/* Brand header */
-.app-brand {display:flex; align-items:center; gap:10px; margin-bottom:-6px;}
-.app-brand .badge {background:#111827; color:#fff; font-size:.72rem; font-weight:800; letter-spacing:.05em; padding:4px 10px; border-radius:999px;}
+/* Tabs */
+[data-testid="stTabs"] button { font-weight: 600; font-size: .86rem; }
 
-/* Phone / narrow viewport: keep the desktop grid usable instead of Streamlit's
-   default behavior of stacking every column full-width, which turns each
-   auction row into a very long vertical list on an iPhone. */
+/* ---------- Phone / narrow ---------- */
 @media (max-width: 900px) {
-  .block-container {padding-left: .6rem !important; padding-right: .6rem !important; padding-top: .75rem !important;}
-  h1 {font-size: 1.4rem !important;}
-  .date-header {font-size: .95rem !important; padding: 9px 12px !important;}
-
-  div[data-testid="stHorizontalBlock"] {
-    flex-wrap: nowrap !important;
-    overflow-x: auto !important;
-    -webkit-overflow-scrolling: touch !important;
-    padding-bottom: 10px !important;
-  }
-  div[data-testid="stHorizontalBlock"] > div {
-    min-width: 108px !important;
-    flex-shrink: 0 !important;
-  }
-  div.stButton > button, div.stDownloadButton > button {
-    min-height: 44px !important;
-    font-size: .95rem !important;
-  }
-  /* iOS Safari auto-zooms on inputs with a font-size under 16px. */
-  input, select, textarea {font-size: 16px !important;}
+  .block-container { padding: .8rem .7rem 2rem .7rem !important; }
+  h1 { font-size: 1.35rem !important; }
+  [data-testid="stVerticalBlockBorderWrapper"] > div { padding: .7rem .7rem !important; }
+  /* Keep the grid as a swipeable table instead of stacking 16 columns vertically */
+  /* One shared horizontal scroller per day card (rows + header move together) */
+  [class*="st-key-grid_card_"] { overflow-x: auto !important; -webkit-overflow-scrolling: touch; padding-bottom: 6px; }
+  [class*="st-key-grid_card_"] [data-testid="stLayoutWrapper"] { width: max-content !important; min-width: 100% !important; }
+  [class*="st-key-grid_card_"] [data-testid="stHorizontalBlock"] { flex-wrap: nowrap !important; overflow: visible !important; width: max-content !important; min-width: 100% !important; align-items: center !important; }
+  [class*="st-key-grid_card_"] .day-header { position: sticky; left: 0; }
+  [class*="st-key-grid_card_"] [data-testid="stHorizontalBlock"] > div { flex-shrink: 0 !important; min-width: 96px !important; }
+  /* Phone column order: star, Address, Time, Src, County, then the rest */
+  [class*="st-key-grid_card_"] [data-testid="stHorizontalBlock"] > div { order: 10; }
+  [class*="st-key-grid_card_"] [data-testid="stHorizontalBlock"] > div:nth-child(1) { order: 1; min-width: 48px !important; }
+  [class*="st-key-grid_card_"] [data-testid="stHorizontalBlock"] > div:nth-child(5) { order: 2; min-width: 210px !important; }
+  [class*="st-key-grid_card_"] [data-testid="stHorizontalBlock"] > div:nth-child(2) { order: 3; min-width: 72px !important; }
+  [class*="st-key-grid_card_"] [data-testid="stHorizontalBlock"] > div:nth-child(3) { order: 4; min-width: 52px !important; }
+  [class*="st-key-grid_card_"] [data-testid="stHorizontalBlock"] > div:nth-child(4) { order: 5; min-width: 120px !important; }
+  [class*="st-key-grid_card_"] [data-testid="stHorizontalBlock"] > div:nth-child(7) { min-width: 52px !important; }
+  [class*="st-key-grid_card_"] .gc.addr { font-size: .82rem; }
+  div.stButton > button, div.stDownloadButton > button { min-height: 44px !important; }
+  input, select, textarea { font-size: 16px !important; } /* stops iOS auto-zoom */
 }
 </style>
 """, unsafe_allow_html=True)
@@ -531,9 +525,9 @@ def build_save_df(df, multiplier, sale_net, close1, close2):
         rows.append(row)
     return pd.DataFrame(rows)
 
-st.markdown('<div class="app-brand"><span class="badge">SIMO HOMES</span></div>', unsafe_allow_html=True)
+st.markdown('<div class="app-brand"><span class="badge">SIMO HOMES</span><span class="env">Maryland / DC foreclosure auctions</span></div>', unsafe_allow_html=True)
 st.title("Auction Intelligence")
-st.caption("Maryland/DC foreclosure auction dashboard — AC, TW, HW, MWC, and A. J. Billig (BL).")
+st.caption("Sources: Alex Cooper (AC) · Tidewater (TW) · Harvey West (HW) · McCabe Weisberg (MWC) · A. J. Billig (BL)")
 
 
 def persist_user_state_before_refresh():
@@ -620,9 +614,9 @@ with st.sidebar:
     st.divider()
     st.header("Column Widths")
     st.caption("Adjust grid column widths here. Streamlit does not support true drag-resize for this custom editable row layout.")
-    addr_w = st.slider("Address width", 1.5, 5.0, float(default_value("addr_w", 2.5)), 0.25, key="addr_w")
+    addr_w = st.slider("Address width", 1.5, 5.0, float(default_value("addr_w", 2.3)), 0.25, key="addr_w")
     county_w = st.slider("County width", 0.7, 2.5, float(default_value("county_w", 1.0)), 0.1, key="county_w")
-    note_w = st.slider("Note width", 0.8, 3.0, float(default_value("note_w", 1.2)), 0.1, key="note_w")
+    note_w = st.slider("Note width", 0.8, 3.0, float(default_value("note_w", 1.1)), 0.1, key="note_w")
 
     if st.button("Save Default Layout", use_container_width=True):
         save_layout_defaults({
@@ -675,6 +669,7 @@ if hide_blocked:
         df = df[~df["Address"].apply(lambda x: city_from_address(x) in blocked_set)]
 
 st.subheader("Filters")
+filters_card = st.container(border=True)
 for _lk, _lv in {
     "auctioneer_grid_filter": default_value("auctioneer_grid_filter", []),
     "county_grid_filter": default_value("county_grid_filter", DEFAULT_COUNTY_FILTER),
@@ -682,7 +677,8 @@ for _lk, _lv in {
 }.items():
     if _lk not in st.session_state:
         st.session_state[_lk] = _lv
-f1, f2, f3, f4 = st.columns([1, 1.5, 2, 1.3])
+with filters_card:
+    f1, f2, f3, f4 = st.columns([1, 1.6, 1.8, 1.2])
 auctioneer_filter = f1.multiselect("Auctioneer", sorted(df["Auctioneer"].dropna().unique()), key="auctioneer_grid_filter")
 county_values = set(df["County"].dropna().astype(str))
 county_options = [c for c in MD_COUNTIES if c in county_values]
@@ -728,6 +724,7 @@ if not visible_save.empty:
     combined = combined.sort_values("Saved At").drop_duplicates("Auction ID", keep="last")
     save_bids(combined)
 
+st.subheader("Actions")
 top1, top2, top3, top4 = st.columns([1,1,1,3])
 if top1.button("Save Bids", type="primary", use_container_width=True):
     save_bids(pd.concat([load_bids(), visible_save], ignore_index=True).sort_values("Saved At").drop_duplicates("Auction ID", keep="last"))
@@ -747,76 +744,86 @@ with top4.expander("Restore archive from backup CSV"):
         except Exception as e:
             st.error(f"Could not restore CSV: {e}")
 
-st.subheader("Main Auction Grid")
+st.subheader("Auction Grid")
 if date_view == "Current auction week":
     a, b = this_or_next_week()
-    st.caption(f"Default view: {a.strftime('%m/%d/%Y')} to {b.strftime('%m/%d/%Y')}.")
+    st.caption(f"Auction week {a.strftime('%b %d')} – {b.strftime('%b %d, %Y')} · {len(filtered)} active sale{'s' if len(filtered) != 1 else ''}. Comp / Rehab / Profit are in thousands.")
+else:
+    st.caption(f"{len(filtered)} active sale{'s' if len(filtered) != 1 else ''}. Comp / Rehab / Profit are in thousands.")
 
 filtered["_Date"] = pd.to_datetime(filtered["Sale Date & Time"], errors="coerce").dt.date
 
-for d, group in filtered.groupby("_Date", dropna=False):
-    st.markdown(f'<div class="date-header">{pd.to_datetime(d).strftime("%A, %B %d, %Y") if pd.notna(d) else "Unknown Date"}</div>', unsafe_allow_html=True)
-    widths = [.45,.7,.5,county_w,addr_w,.8,.45,.75,.8,.8,.8,.9,.6,.9,note_w,.45]
-    headers = ["Fav","Time","Auct","County","Address","Deposit","Occ","Look","Comp","Rehab","Profit","Max","%","MaxS","Note","Ad"]
-    if show_ai:
-        widths += [.8,.8]
-        headers += ["AI ARV","AI Max"]
-    if show_links:
-        widths += [.8]
-        headers += ["Links"]
-    widths += [1.35]
-    headers += ["Hide"]
-    cols = st.columns(widths)
-    for c, h in zip(cols, headers):
-        c.markdown(f"**{h}**")
+def _cell(html, cls=""):
+    return f'<div class="gc {cls}">{html}</div>'
 
-    for _, r in group.iterrows():
-        aid = str(r["Auction ID"])
-        cols = st.columns(widths)
-        dt = pd.to_datetime(r["Sale Date & Time"], errors="coerce")
-        star_label = "⭐" if aid in favorite_properties else "☆"
-        if cols[0].button(star_label, key=safe_key("fav", aid), help="Favorite this auction property", use_container_width=True):
-            toggle_favorite_property(aid)
-            st.rerun()
-        cols[1].write("" if pd.isna(dt) else dt.strftime("%I:%M %p"))
-        cols[2].write(str(r["Auctioneer"]))
-        cols[3].write(r["County"])
-        cols[4].write(r["Address"])
-        cols[5].write(r["Deposit"])
-        cols[6].checkbox("Occ", key=safe_key("occ", aid), label_visibility="collapsed")
-        cols[7].selectbox("Look", ["", "Y", "N", "YY", "Soso"], key=safe_key("look", aid), label_visibility="collapsed")
-        cols[8].text_input("Comp", key=safe_key("comp", aid), label_visibility="collapsed", placeholder="")
-        cols[9].text_input("Rehab", key=safe_key("rehab", aid), label_visibility="collapsed", placeholder="")
-        cols[10].text_input("Profit", key=safe_key("profit", aid), label_visibility="collapsed", placeholder="")
-        def _to_int(v):
-            try:
-                txt = str(v or "").replace(",", "").strip()
-                return int(float(txt)) if txt else 0
-            except Exception:
-                return 0
-        comp = _to_int(st.session_state.get(safe_key("comp", aid), ""))
-        rehab = _to_int(st.session_state.get(safe_key("rehab", aid), ""))
-        profit = _to_int(st.session_state.get(safe_key("profit", aid), ""))
-        maxb, bidpct, maxs = calc_bid(comp, rehab, profit, sale_net, close1, close2, multiplier)
-        cols[11].write(money(maxb))
-        cols[12].write(pct(bidpct))
-        cols[13].write(money(maxs))
-        cols[14].text_input("Note", key=safe_key("note", aid), label_visibility="collapsed")
-        link = clean_external_url(r.get("Ad Link", ""), r.get("Auctioneer", ""))
-        cols[15].markdown(f'<a href="{link}" target="_blank" rel="noopener noreferrer">Ad</a>' if link else "", unsafe_allow_html=True)
-        idx = 16
+for gi, (d, group) in enumerate(filtered.groupby("_Date", dropna=False)):
+    day_label = pd.to_datetime(d).strftime("%A, %B %d, %Y") if pd.notna(d) else "Unknown Date"
+    n = len(group)
+    with st.container(border=True, key=f"grid_card_{gi}"):
+        st.markdown(f'<div class="day-header"><span class="d">{day_label}</span><span class="n">{n} sale{"s" if n != 1 else ""}</span></div>', unsafe_allow_html=True)
+        widths = [.42,.88,.55,county_w,addr_w,.85,.5,.78,.72,.72,.72,.85,.55,.85,note_w,.55]
+        headers = ["", "Time", "Src", "County", "Address", "Dep", "Occ", "Look", "Comp", "Rehab", "Profit", "Max", "%", "MaxS", "Note", "Ad"]
         if show_ai:
-            # Starter AI: use current comp as AI ARV, and current calculated max as AI Max.
-            cols[idx].write(money(float(comp or 0) * multiplier) if comp else "")
-            cols[idx+1].write(money(maxb))
-            idx += 2
+            widths += [.9,.9]
+            headers += ["AI ARV","AI Max"]
         if show_links:
-            addr = r["Address"]
-            cols[idx].markdown(f'<a href="{zillow_link(addr)}" target="_blank" rel="noopener noreferrer">Z</a> / <a href="{redfin_search_link(addr)}" target="_blank" rel="noopener noreferrer">R</a>', unsafe_allow_html=True)
-            idx += 1
-        if cols[idx].button("Hide", key=safe_key("hide", aid), use_container_width=True):
-            hide_address(r["Address"])
-            st.rerun()
+            widths += [.95]
+            headers += ["Links"]
+        widths += [.45]
+        headers += [""]
+        cols = st.columns(widths)
+        for c, h in zip(cols, headers):
+            c.markdown(f'<div class="gh">{h}&nbsp;</div>', unsafe_allow_html=True)
+
+        for _, r in group.iterrows():
+            aid = str(r["Auction ID"])
+            cols = st.columns(widths)
+            dt = pd.to_datetime(r["Sale Date & Time"], errors="coerce")
+            is_fav = aid in favorite_properties
+            if cols[0].button("", icon=":material/star:" if is_fav else ":material/star_outline:", key=safe_key("fav", aid), help="Favorite", use_container_width=True, type="primary" if is_fav else "secondary"):
+                toggle_favorite_property(aid)
+                st.rerun()
+            time_txt = "" if pd.isna(dt) else dt.strftime("%I:%M %p").lstrip("0")
+            cols[1].markdown(_cell(time_txt, "time strong"), unsafe_allow_html=True)
+            src = str(r["Auctioneer"]).upper()
+            cols[2].markdown(f'<span class="src {src}">{src}</span>', unsafe_allow_html=True)
+            county_txt = str(r["County"]).replace(" County", "")
+            cols[3].markdown(_cell(county_txt, "muted county"), unsafe_allow_html=True)
+            cols[4].markdown(_cell(r["Address"], "addr"), unsafe_allow_html=True)
+            cols[5].markdown(_cell(r["Deposit"], "mono"), unsafe_allow_html=True)
+            cols[6].checkbox("Occ", key=safe_key("occ", aid), label_visibility="collapsed")
+            cols[7].selectbox("Look", ["", "Y", "N", "YY", "Soso"], key=safe_key("look", aid), label_visibility="collapsed")
+            cols[8].text_input("Comp", key=safe_key("comp", aid), label_visibility="collapsed", placeholder="—")
+            cols[9].text_input("Rehab", key=safe_key("rehab", aid), label_visibility="collapsed", placeholder="—")
+            cols[10].text_input("Profit", key=safe_key("profit", aid), label_visibility="collapsed", placeholder="—")
+            def _to_int(v):
+                try:
+                    txt = str(v or "").replace(",", "").strip()
+                    return int(float(txt)) if txt else 0
+                except Exception:
+                    return 0
+            comp = _to_int(st.session_state.get(safe_key("comp", aid), ""))
+            rehab = _to_int(st.session_state.get(safe_key("rehab", aid), ""))
+            profit = _to_int(st.session_state.get(safe_key("profit", aid), ""))
+            maxb, bidpct, maxs = calc_bid(comp, rehab, profit, sale_net, close1, close2, multiplier)
+            cols[11].markdown(_cell(money(maxb) or "—", "mono strong" if maxb else "mono muted"), unsafe_allow_html=True)
+            cols[12].markdown(_cell(pct(bidpct) or "—", "mono" if bidpct else "mono muted"), unsafe_allow_html=True)
+            cols[13].markdown(_cell(money(maxs) or "—", "mono" if maxs else "mono muted"), unsafe_allow_html=True)
+            cols[14].text_input("Note", key=safe_key("note", aid), label_visibility="collapsed", placeholder="Note")
+            link = clean_external_url(r.get("Ad Link", ""), r.get("Auctioneer", ""))
+            cols[15].markdown(f'<a class="pill" href="{link}" target="_blank" rel="noopener noreferrer">Ad ↗</a>' if link else _cell("—", "muted"), unsafe_allow_html=True)
+            idx = 16
+            if show_ai:
+                cols[idx].markdown(_cell(money(float(comp or 0) * multiplier) if comp else "—", "mono"), unsafe_allow_html=True)
+                cols[idx+1].markdown(_cell(money(maxb) or "—", "mono"), unsafe_allow_html=True)
+                idx += 2
+            if show_links:
+                addr = r["Address"]
+                cols[idx].markdown(f'<div class="links"><a href="{zillow_link(addr)}" target="_blank" rel="noopener noreferrer" title="Zillow">Z</a><a href="{redfin_search_link(addr)}" target="_blank" rel="noopener noreferrer" title="Redfin">R</a></div>', unsafe_allow_html=True)
+                idx += 1
+            if cols[idx].button("", icon=":material/visibility_off:", key=safe_key("hide", aid), help="Hide this property", use_container_width=True):
+                hide_address(r["Address"])
+                st.rerun()
 
 st.divider()
 tab1, tab2 = st.tabs(["Saved Bid Archive", "AI Coach"])
