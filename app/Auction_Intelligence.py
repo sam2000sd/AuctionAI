@@ -28,7 +28,7 @@ from app.core.utils import money, pct, this_or_next_week, city_from_address, add
 from app.scrapers.sources import scrape_many, clear_cache, load_values
 from app.storage.local import load_bids, save_bids, merge_bids, load_hidden, hide_address, clear_hidden, load_blocked_cities, save_blocked_cities, load_favorite_properties, save_favorite_properties, toggle_favorite_property, load_layout_defaults, save_layout_defaults, remote_enabled
 
-st.set_page_config(page_title="Auction Intelligence", page_icon="🏛️", layout="wide")
+st.set_page_config(page_title="Simo Homes · Auction Intelligence", page_icon="🏛️", layout="wide")
 
 st.markdown("""
 <style>
@@ -638,8 +638,11 @@ with st.sidebar:
             else:
                 st.error(f"{s}: {res['error']}")
 
-    st.write(f"Cache files: **{len(paths())}**")
-    st.caption("Storage: durable GitHub Gist backup is ON" if remote_enabled() else "Storage: local file only. On Streamlit Cloud, add GITHUB_TOKEN and GIST_ID secrets or archives can disappear after sleep/restart.")
+    with st.expander(f"Storage status · {len(paths())} archive file{'s' if len(paths()) != 1 else ''}", expanded=False):
+        if remote_enabled():
+            st.caption("Backups are saved to durable cloud storage and persist across restarts.")
+        else:
+            st.caption("Backups are stored on this server only and may reset after a period of inactivity. Use Backup Archive / Export Excel below to keep your own copy.")
 
     st.divider()
     st.header("Focus")
@@ -670,7 +673,7 @@ with st.sidebar:
 
     st.divider()
     st.header("Column Widths")
-    st.caption("Adjust grid column widths here. Streamlit does not support true drag-resize for this custom editable row layout.")
+    st.caption("Fine-tune how wide each column appears in the auction grid.")
     addr_w = st.slider("Address width", 1.5, 5.0, float(default_value("addr_w", 2.3)), 0.25, key="addr_w")
     county_w = st.slider("County width", 0.7, 2.5, float(default_value("county_w", 1.0)), 0.1, key="county_w")
     note_w = st.slider("Note width", 0.8, 3.0, float(default_value("note_w", 1.0)), 0.1, key="note_w")
@@ -951,7 +954,13 @@ else:
 # ---------------------------------------------------------------------------
 # Auction grid / cards
 # ---------------------------------------------------------------------------
-st.subheader("Auction Grid" if not PHONE else "Auctions")
+if PHONE:
+    st.subheader("Auctions")
+else:
+    gh1, gh2 = st.columns([5, 1])
+    gh1.subheader("Auction Grid")
+    _gv = gh2.radio("View", ["List", "Expanded"], index=0 if default_value("grid_view_mode", "List") == "List" else 1, horizontal=True, key="grid_view_mode", label_visibility="collapsed")
+GRID_EXPANDED = (not PHONE) and st.session_state.get("grid_view_mode", "List") == "Expanded"
 if date_view == "Current auction week":
     a, b = this_or_next_week()
     st.caption(f"Auction week {a.strftime('%b %d')} – {b.strftime('%b %d, %Y')} · {len(filtered)} active sale{'s' if len(filtered) != 1 else ''}. Comp / Rehab / Profit are in thousands.")
@@ -1029,6 +1038,12 @@ for gi, (d, group) in enumerate(filtered.groupby("_Date", dropna=False)):
     n = len(group)
     if PHONE:
         st.markdown(f'<div class="day-header phone"><span class="d">{pd.to_datetime(d).strftime("%a, %b %d") if pd.notna(d) else "Unknown Date"}</span><span class="n">{n} sale{"s" if n != 1 else ""}</span></div>', unsafe_allow_html=True)
+        for _, r in group.iterrows():
+            render_phone_card(r, gi)
+        continue
+
+    if GRID_EXPANDED:
+        st.markdown(f'<div class="day-header"><span class="d">{day_label}</span><span class="n">{n} sale{"s" if n != 1 else ""}</span></div>', unsafe_allow_html=True)
         for _, r in group.iterrows():
             render_phone_card(r, gi)
         continue
