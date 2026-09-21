@@ -31,6 +31,9 @@ URLS = {
     "MWC_MD": "https://apps.mwc-law.com/SalesLists/MD.html",
     "MWC_DC": "https://apps.mwc-law.com/SalesLists/DC.html",
     "BL": "https://ajbillig.com/auction-list/",
+    "TW_AD": "https://www.tidewaterauctions.com/default.aspx/GetAd",
+    "ADC_GRAPH": "https://graph.auction.com/graphql",
+    "ADC_SITE": "https://www.auction.com",
 }
 
 MONTHS = {
@@ -571,9 +574,117 @@ def parse_tw_text_fallback(soup, html=""):
 
     return rows
 
+
+def _tw_fetch_ad(ad_id):
+    """Tidewater ads are loaded by JS (GetAd(id) -> POST webmethod), so there is no
+    standalone ad URL. Fetch the ad HTML once at scrape time and cache it to disk.
+    The row's ad link becomes 'tw-ad:<id>' which the app renders as an in-app ad viewer.
+    """
+    ad_dir = SCRAPED_DIR / "ads"
+    ad_dir.mkdir(parents=True, exist_ok=True)
+    path = ad_dir / f"TW_{ad_id}.html"
+    if path.exists() and path.stat().st_size > 50:
+        return f"tw-ad:{ad_id}"
+    try:
+        r = requests.post(
+            URLS["TW_AD"],
+            headers={**HEADERS, "Content-Type": "application/json; charset=utf-8", "X-Requested-With": "XMLHttpRequest"},
+            data="{'id':'%s'}" % ad_id,
+            timeout=REQUEST_TIMEOUT,
+        )
+        r.raise_for_status()
+        body = r.json().get("d", "")
+        # TW double-encodes smart quotes (UTF-8 bytes read as cp1252). Undo when it round-trips cleanly.
+        if "\u00e2\u20ac" in body or "\u00c3" in body:
+            try:
+                # cp1252 leaves a few control bytes (0x81,0x8d,0x8f,0x90,0x9d) undefined; map them through latin-1.
+                raw_bytes = body.encode("cp1252", errors="ignore") if all(ord(c) not in (0x81, 0x8D, 0x8F, 0x90, 0x9D) for c in body) else "".join(
+                    c if ord(c) < 0x80 or ord(c) in (0x81, 0x8D, 0x8F, 0x90, 0x9D) else c.encode("cp1252", errors="ignore").decode("latin-1") for c in body
+                ).encode("latin-1", errors="ignore")
+                fixed = raw_bytes.decode("utf-8", errors="ignore")
+                if fixed and len(fixed) > len(body) * 0.8:
+                    body = fixed
+            except Exception:
+                pass
+        if body and len(body) > 50:
+            # Strip scripts defensively before caching.
+            body = re.sub(r"<script.*?</script>", "", body, flags=re.S | re.I)
+            path.write_text(body, encoding="utf-8")
+            return f"tw-ad:{ad_id}"
+    except Exception:
+        pass
+    return ""
+
+
+def parse_tw_blocks(soup):
+    """Current Tidewater layout: div.us-block-header (date + county) followed by
+    div.us-sales-block containing div.us-sale-item rows with us-sale-time/address/
+    deposit/client/ad cells, a hidden hdnCancelled input, and a 'View ad' link that
+    calls GetAd(<id>)."""
+    rows = []
+    for header in soup.select("div.us-block-header"):
+        date_el = header.select_one(".us-date")
+        county_el = header.select_one(".us-countyname")
+        sale_date = date_from_heading(clean_text(date_el.get_text(" "))) if date_el else ""
+        county_raw = clean_text(county_el.get_text(" ")) if county_el else ""
+        county = ""
+        for c in COUNTIES:
+            if c.lower().replace("'", "") == county_raw.lower().replace("'", ""):
+                county = c
+                break
+        if not county and county_raw:
+            county = county_raw
+        block = header.find_next_sibling("div", class_="us-sales-block")
+        if not block:
+            continue
+        for item in block.select("div.us-sale-item"):
+            if "us-sale-header" in (item.get("class") or []):
+                continue
+            hidden = item.find("input", attrs={"name": re.compile("hdnCancelled")})
+            if hidden is not None and str(hidden.get("value", "0")).strip() not in {"0", "", "False", "false"}:
+                continue
+            txt = clean_text(item.get_text(" "))
+            if is_cancelled_text(txt) or item.find(["s", "strike", "del"]):
+                continue
+            time_el = item.select_one(".us-sale-time")
+            addr_el = item.select_one(".us-sale-address")
+            dep_el = item.select_one(".us-sale-deposit")
+            sale_time = clean_text(time_el.get_text(" ")) if time_el else ""
+            address = ""
+            if addr_el is not None:
+                link_el = addr_el.select_one('a[id*="lnkMap_"]') or addr_el.select_one("a[href*='maps.google']")
+                address = clean_text(link_el.get_text(" ")) if link_el else clean_text(addr_el.get_text(" "))
+            address = clean_text(address.replace("HUD SALE:", ""))
+            # Drop trailing sale notes TW appends after the address (e.g. HUD deposit instructions).
+            address = re.split(r"\s+-\s+-?\s*|\s+-\s+ALL\b|\bALL DEPOSITS\b", address, maxsplit=1)[0].strip(" -")
+            deposit = clean_text(dep_el.get_text(" ")) if dep_el else ""
+            if not re.search(r"\d{1,2}:\d{2}", sale_time) or not re.search(r"\d", address):
+                continue
+            ad_link = ""
+            ad_a = item.select_one(".us-sale-ad a[href]")
+            if ad_a is not None:
+                m = re.search(r"GetAd\((\d+)\)", ad_a.get("href", ""))
+                if m:
+                    ad_link = _tw_fetch_ad(m.group(1))
+                else:
+                    ad_link = normalize_ad_url(ad_a.get("href", ""), URLS["TW"])
+            rows.append({
+                "source": "TW", "auctioneer": "TW", "sale date": sale_date, "sale time": sale_time.upper(),
+                "county": county, "address": address, "deposit": deposit or "SEE AD", "status": "Active",
+                "ad link": ad_link,
+            })
+    return rows
+
+
 def parse_tw():
     html = fetch(URLS["TW"])
     soup = BeautifulSoup(html, "html.parser")
+
+    # Current TW layout (div blocks). This is the primary parser as of Sep 2026.
+    rows = parse_tw_blocks(soup)
+    if rows:
+        return dedupe(rows)
+
     rows = []
 
     # First pass: real table/TR rows, where gray/cancelled styling is detectable.
@@ -734,6 +845,95 @@ def parse_bl():
         })
     return dedupe(rows)
 
+ADC_QUERY = """query resiSearch_blueprint_seekListingsFromFilters($filters: ListingCompatabilityFilters!) {
+  seek_listings_from_filters(filters: $filters) { total_count content { ... on Listing {
+    listing_id listing_status listing_page_path formatted_address(format: DOUBLE_LINE)
+    listing_configuration { product_type asset_type occupancy_status trustee_sales_channel }
+    trustee { sale_time }
+    venue { venue_type venue_name venue_address { street_number street_name municipality country_primary_subdivision postal_code } }
+    auction { auction_date }
+    seller_property { street_description municipality country_primary_subdivision country_secondary_subdivision postal_code }
+    selling_method(resolvePolicy: CACHE_ONLY) { __typename ... on LiveAuctionSegment { starting_bid_amount configuration { state_deposit_rule } } }
+  } } } }"""
+
+ADC_HEADERS = {
+    "Accept": "application/json",
+    "Content-Type": "application/json",
+    "Auction-Graph-Source": "auctioncom",
+    "user-agent": "adc/fetch/resi_search",
+}
+
+
+def parse_adc(include_concierge=False):
+    """Auction.com in-person foreclosure (trustee) sales for MD + DC via graph.auction.com.
+
+    Only sales Auction.com conducts itself (trustee_sales_channel == AUCTIONEERING) are
+    imported by default. CONCIERGE rows are third-party sales that Auction.com merely
+    lists; those are already covered by AC/TW/HW/MWC/BL and would duplicate them.
+    The app also de-duplicates across sources by street address as a safety net.
+    """
+    rows = []
+    for state in ["MD", "DC"]:
+        variables = {"filters": {"property_state": state, "listing_type": "active", "sort": "auction_date_order", "limit": 500, "version": 1, "offset": 0}}
+        try:
+            r = requests.post(URLS["ADC_GRAPH"], headers=ADC_HEADERS, json={"query": ADC_QUERY, "variables": variables}, timeout=REQUEST_TIMEOUT + 12)
+            r.raise_for_status()
+            data = r.json()
+        except Exception:
+            continue
+        items = (((data or {}).get("data") or {}).get("seek_listings_from_filters") or {}).get("content") or []
+        for it in items:
+            cfg = it.get("listing_configuration") or {}
+            venue = it.get("venue") or {}
+            if (venue.get("venue_type") or "").upper() != "LIVE":
+                continue
+            if (cfg.get("product_type") or "").upper() != "TRUSTEE":
+                continue
+            channel = (cfg.get("trustee_sales_channel") or "").upper()
+            if not include_concierge and channel != "AUCTIONEERING":
+                continue
+            if is_cancelled_text(str(it.get("listing_status") or "")):
+                continue
+            sale_date = (it.get("auction") or {}).get("auction_date") or ""
+            if not sale_date:
+                continue
+            sale_time = ((it.get("trustee") or {}).get("sale_time") or "").strip()
+            if sale_time:
+                try:
+                    hh, mm = sale_time.split(":")[:2]
+                    hh = int(hh)
+                    sale_time = f"{(hh % 12) or 12}:{mm} {'PM' if hh >= 12 else 'AM'}"
+                except Exception:
+                    sale_time = ""
+            fa = it.get("formatted_address") or []
+            sp = it.get("seller_property") or {}
+            street = clean_text(fa[0]) if fa else clean_text(sp.get("street_description", ""))
+            city = clean_text(sp.get("municipality", "")).title()
+            st_abbr = clean_text(sp.get("country_primary_subdivision", "")) or state
+            zipc = clean_text(sp.get("postal_code", ""))
+            address = ", ".join([x for x in [street, city, f"{st_abbr} {zipc}".strip()] if x])
+            county = ""
+            if len(fa) > 1 and "County" in fa[1]:
+                county = clean_text(fa[1].split(",")[-1])
+            if not county:
+                county = clean_text(sp.get("country_secondary_subdivision", ""))
+                if county and not county.lower().endswith("county") and county.lower() != "baltimore city":
+                    county = county.title() + " County"
+            if state == "DC":
+                county = "Washington, DC"
+            sm = it.get("selling_method") or {}
+            deposit = ((sm.get("configuration") or {}).get("state_deposit_rule") or "").strip()
+            deposit = deposit if deposit else "SEE AD"
+            va = venue.get("venue_address") or {}
+            venue_txt = " ".join([x for x in [venue.get("venue_name", ""), "—", va.get("street_number", ""), va.get("street_name", ""), va.get("municipality", "")] if x]).strip(" —")
+            link = URLS["ADC_SITE"] + str(it.get("listing_page_path") or "")
+            rows.append({
+                "source": "ADC", "auctioneer": "ADC", "sale date": sale_date, "sale time": sale_time,
+                "county": county, "address": address, "deposit": deposit, "status": "Active",
+                "ad link": link, "venue": venue_txt, "occupancy": (cfg.get("occupancy_status") or "").title(),
+            })
+    return dedupe(rows)
+
 def dedupe(rows):
     seen, out = set(), []
     for r in rows:
@@ -746,7 +946,7 @@ def dedupe(rows):
 def scrape_source(source, clear_old=False):
     if clear_old:
         clear_cache()
-    parser = {"AC": parse_ac, "TW": parse_tw, "HW": parse_hw, "MWC": parse_mwc, "BL": parse_bl}[source]
+    parser = {"AC": parse_ac, "TW": parse_tw, "HW": parse_hw, "MWC": parse_mwc, "BL": parse_bl, "ADC": parse_adc}[source]
     rows = parser()
     path = write_rows(source, rows)
     return {"ok": True, "rows": len(rows), "path": str(path or ""), "error": ""}
