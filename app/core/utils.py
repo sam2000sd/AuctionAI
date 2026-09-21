@@ -304,8 +304,21 @@ def redfin_link(address):
     return "https://www.redfin.com/stingray/do/location-autocomplete?location=" + quote_plus(str(address or "")) + "&start=0&count=10&v=2"
 
 def redfin_search_link(address):
-    q = quote_plus('site:redfin.com "' + str(address or '').replace('"', '') + '"')
-    return "https://www.google.com/search?q=" + q
+    """Redfin has no public address deep link and blocks server-side lookups, so use
+    DuckDuckGo's "I'm feeling lucky" (leading backslash) restricted to redfin.com. It
+    redirects straight to the Redfin property page in the user's browser."""
+    addr = re.sub(r"\s+", " ", str(address or "").replace('"', "")).strip()
+    return "https://duckduckgo.com/?q=" + quote_plus("\\site:redfin.com " + addr)
+
+def loose_address_key(addr):
+    """Street number + first real street word + zip. Matches the same property across
+    sources with different formatting (e.g. '5865E BONIWOOD TURN' vs '5865 E Boniwood Turn')."""
+    a = str(addr or "").upper()
+    num = re.match(r"\s*(\d+)", a)
+    num = num.group(1) if num else ""
+    words = [w for w in re.findall(r"[A-Z]+", a.split(",")[0]) if w not in {"E", "W", "N", "S", "NE", "NW", "SE", "SW", "NORTH", "SOUTH", "EAST", "WEST", "UNIT", "APT", "STE"}]
+    zipm = re.search(r"\b(\d{5})(?:-\d{4})?\s*$", a)
+    return (num + "|" + (words[0] if words else "") + "|" + (zipm.group(1) if zipm else "")) if num else a
 
 def is_cancelled_text(value) -> bool:
     txt = clean_text(value).upper()
