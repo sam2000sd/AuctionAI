@@ -30,6 +30,7 @@ URLS = {
     "HW": "https://www.hwestauctions.com/schedule.v4.php",
     "MWC_MD": "https://apps.mwc-law.com/SalesLists/MD.html",
     "MWC_DC": "https://apps.mwc-law.com/SalesLists/DC.html",
+    "BL": "https://ajbillig.com/auction-list/",
 }
 
 MONTHS = {
@@ -673,6 +674,66 @@ def parse_mwc():
                 rows.append({"source":"MWC","auctioneer":"MWC","sale date":clean_text(r.get("sale date","")),"sale time":clean_text(r.get("sale time","")),"county":county,"address":address,"deposit":"SEE AD","status":"Active","ad link":url})
     return dedupe(rows)
 
+def parse_bl():
+    """A. J. Billig & Co. (ajbillig.com). Adds coverage that AC/TW/HW/MWC miss,
+    including Howard County. Cards are static HTML: <div class="grid-cell">.
+    """
+    html = fetch(URLS["BL"])
+    soup = BeautifulSoup(html, "html.parser")
+    rows = []
+    now = datetime.now()
+    for cell in soup.select("div.grid-cell"):
+        addr_p = None
+        for p in cell.find_all("p"):
+            if p.find("br") and re.search(r"\d", clean_text(p.get_text(" "))):
+                addr_p = p
+                break
+        if addr_p is None:
+            continue
+        lines = [clean_text(x) for x in addr_p.get_text("\n").split("\n") if clean_text(x)]
+        if len(lines) < 2:
+            continue
+        street = lines[0]
+        city_line = lines[1] if len(lines) > 1 else ""
+        county = lines[2] if len(lines) > 2 else ""
+        if not county:
+            for c in COUNTIES:
+                if c.lower().replace(" county", "") in cell.get_text(" ").lower():
+                    county = c
+                    break
+        address = ", ".join([x for x in [street, city_line] if x])
+        if not re.search(r"\d", address):
+            continue
+
+        sale_date, sale_time = "", ""
+        for sub in cell.select("div.subheading"):
+            txt = clean_text(sub.get_text(" "))
+            m = re.search(
+                r"(JANUARY|FEBRUARY|MARCH|APRIL|MAY|JUNE|JULY|AUGUST|SEPTEMBER|OCTOBER|NOVEMBER|DECEMBER)\s+(\d{1,2})\D+(\d{1,2}:\d{2}\s*(?:AM|PM))",
+                txt, re.I,
+            )
+            if m:
+                month = MONTHS[m.group(1).upper()]
+                day = int(m.group(2))
+                year = now.year if int(month) >= now.month else now.year + 1
+                sale_date = f"{month}/{day:02d}/{year}"
+                sale_time = m.group(3).upper().replace(" ", "")
+                break
+        if not sale_date or not sale_time:
+            continue
+
+        link = ""
+        a = cell.select_one("a.button[href]") or cell.select_one("a[href]")
+        if a:
+            link = normalize_ad_url(a.get("href", ""), URLS["BL"])
+
+        rows.append({
+            "source": "BL", "auctioneer": "BL", "sale date": sale_date, "sale time": sale_time,
+            "county": county, "address": address, "deposit": "SEE AD", "status": "Active",
+            "ad link": link,
+        })
+    return dedupe(rows)
+
 def dedupe(rows):
     seen, out = set(), []
     for r in rows:
@@ -685,7 +746,7 @@ def dedupe(rows):
 def scrape_source(source, clear_old=False):
     if clear_old:
         clear_cache()
-    parser = {"AC": parse_ac, "TW": parse_tw, "HW": parse_hw, "MWC": parse_mwc}[source]
+    parser = {"AC": parse_ac, "TW": parse_tw, "HW": parse_hw, "MWC": parse_mwc, "BL": parse_bl}[source]
     rows = parser()
     path = write_rows(source, rows)
     return {"ok": True, "rows": len(rows), "path": str(path or ""), "error": ""}
