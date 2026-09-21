@@ -24,8 +24,8 @@ if str(ROOT_DIR) not in sys.path:
 from app.core.config import SCRAPED_DIR, EXPORT_DIR
 from app.core.normalize import normalize_files
 from app.core.formulas import calc_bid
-from app.core.utils import money, pct, this_or_next_week, city_from_address, address_key, zillow_link, redfin_link, redfin_search_link, MD_COUNTIES
-from app.scrapers.sources import scrape_many, clear_cache
+from app.core.utils import money, pct, this_or_next_week, city_from_address, address_key, zillow_link, redfin_link, redfin_search_link, loose_address_key, MD_COUNTIES
+from app.scrapers.sources import scrape_many, clear_cache, load_values
 from app.storage.local import load_bids, save_bids, merge_bids, load_hidden, hide_address, clear_hidden, load_blocked_cities, save_blocked_cities, load_favorite_properties, save_favorite_properties, toggle_favorite_property, load_layout_defaults, save_layout_defaults, remote_enabled
 
 st.set_page_config(page_title="Auction Intelligence", page_icon="🏛️", layout="wide")
@@ -146,7 +146,7 @@ a:hover { text-decoration: underline; }
 [class*="st-key-grid_card_"] [data-testid="stHorizontalBlock"]:last-child { border-bottom: 0; }
 [class*="st-key-grid_card_"] .gh { font-size: .62rem; font-weight: 700; letter-spacing: .03em; text-transform: uppercase; color: var(--ai-muted); white-space: nowrap; overflow: visible; padding: 2px 0 6px 0; }
 [class*="st-key-grid_card_"] .gc { font-size: .84rem; color: var(--ai-ink); line-height: 1.3; }
-[class*="st-key-grid_card_"] .gc.mono { font-variant-numeric: tabular-nums; white-space: nowrap; }
+[class*="st-key-grid_card_"] .gc.mono { font-variant-numeric: tabular-nums; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 [class*="st-key-grid_card_"] .gc.county { word-break: keep-all; overflow-wrap: normal; }
 [class*="st-key-grid_card_"] .gc.time { font-size: .8rem; font-variant-numeric: tabular-nums; }
 [class*="st-key-grid_card_"] .gc.muted { color: var(--ai-muted); }
@@ -192,6 +192,14 @@ a:hover { text-decoration: underline; }
 .pc-addr { font-size: 1.02rem; font-weight: 700; color: var(--ai-ink); line-height: 1.25; margin: 4px 0 2px 0; }
 .pc-meta { font-size: .8rem; color: var(--ai-muted); }
 .pc-meta b { color: var(--ai-ink-2); font-weight: 700; }
+.pc-val { font-size: .84rem; color: var(--ai-ink); margin-top: 3px; }
+.pc-val b { font-size: .98rem; color: var(--ai-navy); font-weight: 800; }
+.pc-val .vl { font-size: .68rem; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--ai-muted); }
+.pc-val .more { color: var(--ai-muted); font-size: .76rem; }
+.gc.val { display: flex; flex-direction: column; line-height: 1.1; cursor: help; }
+.gc.val .vh { font-weight: 700; color: var(--ai-navy); }
+.gc.val .vl { font-size: .58rem; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--ai-muted); }
+.pill.muted { background: #f1f5f9; color: #94a3b8; }
 .pc-bids { display: flex; gap: 8px; margin: 8px 0 4px 0; }
 .pc-bids > div { flex: 1; background: #f1f5f9; border-radius: 8px; padding: 6px 8px; display: flex; flex-direction: column; }
 .pc-bids .k { font-size: .6rem; font-weight: 700; letter-spacing: .08em; color: var(--ai-muted); }
@@ -403,6 +411,11 @@ def export_view_df(df):
     out["%"] = ""
     out["MaxS"] = ""
     out["Ad"] = [clean_external_url(a, au) for a, au in zip(src.get("Ad Link", ""), src.get("Auctioneer", ""))]
+    vals = [PROPERTY_VALUES.get(loose_address_key(a)) or {} for a in src.get("Address", "")]
+    out["Est Value"] = [v.get("est") or "" for v in vals]
+    out["MD Assessed"] = [v.get("assessed") or "" for v in vals]
+    out["Sq Ft"] = [v.get("sqft") or "" for v in vals]
+    out["Year Built"] = [v.get("year") or "" for v in vals]
     return out
 
 def excel_bytes(df, sale_net=0.96, close1=0.06, close2=0.05):
@@ -660,7 +673,7 @@ with st.sidebar:
     st.caption("Adjust grid column widths here. Streamlit does not support true drag-resize for this custom editable row layout.")
     addr_w = st.slider("Address width", 1.5, 5.0, float(default_value("addr_w", 2.3)), 0.25, key="addr_w")
     county_w = st.slider("County width", 0.7, 2.5, float(default_value("county_w", 1.0)), 0.1, key="county_w")
-    note_w = st.slider("Note width", 0.8, 3.0, float(default_value("note_w", 1.1)), 0.1, key="note_w")
+    note_w = st.slider("Note width", 0.8, 3.0, float(default_value("note_w", 1.0)), 0.1, key="note_w")
 
     if st.button("Save Default Layout", use_container_width=True):
         save_layout_defaults({
@@ -803,6 +816,43 @@ def render_ad_control(container, raw_link, auctioneer, aid, label="Ad", compact=
 def _cell(html, cls=""):
     return f'<div class="gc {cls}">{html}</div>'
 
+PROPERTY_VALUES = load_values()
+
+def _k(n):
+    try:
+        n = float(n)
+    except Exception:
+        return ""
+    if not n:
+        return ""
+    return f"${n/1000:,.0f}k" if n >= 10000 else f"${n:,.0f}"
+
+def value_info(address):
+    """(headline, label, tooltip, record) for a property: market estimate if we have one, else MD assessment."""
+    rec = PROPERTY_VALUES.get(loose_address_key(address)) or {}
+    est, assd = rec.get("est"), rec.get("assessed")
+    head, label = "", ""
+    if est:
+        head, label = _k(est), "est"
+    elif assd:
+        head, label = _k(assd), "assd"
+    bits = []
+    if est:
+        bits.append(f"Est. market value {money(est)}" + (f" (range {_k(rec.get('est_low'))}–{_k(rec.get('est_high'))})" if rec.get("est_low") else ""))
+    if assd:
+        bits.append(f"MD assessment {money(assd)}")
+    if rec.get("rent"):
+        bits.append(f"Est. rent {money(rec['rent'])}/mo")
+    if rec.get("sqft"):
+        bits.append(f"{int(rec['sqft']):,} sq ft")
+    if rec.get("year"):
+        bits.append(f"built {int(rec['year'])}")
+    if rec.get("last_sale"):
+        bits.append(f"last sale {money(rec['last_sale'])} {str(rec.get('last_sale_date') or '')[:4]}".strip())
+    if rec.get("owner_occupied"):
+        bits.append("owner-occupied")
+    return head, label, " · ".join(bits), rec
+
 # ---------------------------------------------------------------------------
 # Filters
 # ---------------------------------------------------------------------------
@@ -931,6 +981,7 @@ def render_phone_card(r, gi):
     src = str(r["Auctioneer"]).upper()
     is_fav = aid in favorite_properties
     county_txt = str(r["County"]).replace(" County", "")
+    vh, vl, vtip, vrec = value_info(r["Address"])
     with st.container(border=True, key=f"pcard_{aid}"):
         h1, h2 = st.columns([6, 1])
         h1.markdown(
@@ -939,7 +990,9 @@ def render_phone_card(r, gi):
             f'<div class="pc-addr">{r["Address"]}</div>'
             f'<div class="pc-meta">Deposit <b>{r["Deposit"]}</b>'
             + (f' · <b>{r.get("Occupancy","")}</b>' if str(r.get("Occupancy","") or "").strip() else "")
-            + '</div></div>',
+            + '</div>'
+            + (f'<div class="pc-val"><b>{vh}</b> <span class="vl">{ {"est": "est. value", "assd": "MD assessed"}.get(vl, vl) }</span>' + (f' <span class="more">· {vtip.split(" · ", 1)[1] if " · " in vtip else ""}</span>' if " · " in vtip else "") + '</div>' if vh else "")
+            + '</div>',
             unsafe_allow_html=True,
         )
         if h2.button("", icon=":material/star:" if is_fav else ":material/star_outline:", key=safe_key("fav", aid), type="primary" if is_fav else "secondary", use_container_width=True):
@@ -961,11 +1014,13 @@ def render_phone_card(r, gi):
         j1.selectbox("Look", ["", "Y", "N", "YY", "Soso"], key=safe_key("look", aid), placeholder="Look")
         j2.checkbox("Occupied", key=safe_key("occ", aid))
         j3.text_input("Note", key=safe_key("note", aid), placeholder="Note")
-        b1, b2, b3, b4 = st.columns(4)
+        sdat_url = (vrec or {}).get("sdat_url", "")
+        b1, b2, b3, b4, b5 = st.columns([1, 1, 1, 1, .6])
         render_ad_control(b1, r.get("Ad Link", ""), r.get("Auctioneer", ""), aid, label="Ad", compact=False)
         b2.markdown(f'<a class="pill wide" href="{zillow_link(r["Address"])}" target="_blank" rel="noopener noreferrer">Zillow</a>', unsafe_allow_html=True)
         b3.markdown(f'<a class="pill wide" href="{redfin_search_link(r["Address"])}" target="_blank" rel="noopener noreferrer">Redfin</a>', unsafe_allow_html=True)
-        if b4.button("", icon=":material/visibility_off:", key=safe_key("hide", aid), help="Hide this property", use_container_width=True):
+        b4.markdown(f'<a class="pill wide" href="{sdat_url}" target="_blank" rel="noopener noreferrer">SDAT</a>' if sdat_url else '<span class="pill wide muted">SDAT</span>', unsafe_allow_html=True)
+        if b5.button("", icon=":material/visibility_off:", key=safe_key("hide", aid), help="Hide this property", use_container_width=True):
             hide_address(r["Address"])
             st.rerun()
 
@@ -980,13 +1035,13 @@ for gi, (d, group) in enumerate(filtered.groupby("_Date", dropna=False)):
 
     with st.container(border=True, key=f"grid_card_{gi}"):
         st.markdown(f'<div class="day-header"><span class="d">{day_label}</span><span class="n">{n} sale{"s" if n != 1 else ""}</span></div>', unsafe_allow_html=True)
-        widths = [.42,.88,.55,county_w,addr_w,.85,.5,.78,.72,.72,.72,.85,.55,.85,note_w,.62]
-        headers = ["", "Time", "Src", "County", "Address", "Dep", "Occ", "Look", "Comp", "Rehab", "Profit", "Max", "%", "MaxS", "Note", "Ad"]
+        widths = [.42,.9,.55,county_w,addr_w,.8,.85,.5,.78,.7,.7,.7,.85,.55,.85,note_w,.6]
+        headers = ["", "Time", "Src", "County", "Address", "Dep", "Value", "Occ", "Look", "Comp", "Rehab", "Profit", "Max", "%", "MaxS", "Note", "Ad"]
         if show_ai:
             widths += [.9,.9]
             headers += ["AI ARV","AI Max"]
         if show_links:
-            widths += [.95]
+            widths += [1.1]
             headers += ["Links"]
         widths += [.45]
         headers += [""]
@@ -1010,25 +1065,32 @@ for gi, (d, group) in enumerate(filtered.groupby("_Date", dropna=False)):
             cols[3].markdown(_cell(county_txt, "muted county"), unsafe_allow_html=True)
             cols[4].markdown(_cell(r["Address"], "addr"), unsafe_allow_html=True)
             cols[5].markdown(_cell(r["Deposit"], "mono"), unsafe_allow_html=True)
-            cols[6].checkbox("Occ", key=safe_key("occ", aid), label_visibility="collapsed")
-            cols[7].selectbox("Look", ["", "Y", "N", "YY", "Soso"], key=safe_key("look", aid), label_visibility="collapsed", placeholder="—")
-            cols[8].text_input("Comp", key=safe_key("comp", aid), label_visibility="collapsed", placeholder="—")
-            cols[9].text_input("Rehab", key=safe_key("rehab", aid), label_visibility="collapsed", placeholder="—")
-            cols[10].text_input("Profit", key=safe_key("profit", aid), label_visibility="collapsed", placeholder="—")
+            vh, vl, vtip, vrec = value_info(r["Address"])
+            if vh:
+                cols[6].markdown(f'<div class="gc mono val" title="{vtip}"><span class="vh">{vh}</span><span class="vl">{vl}</span></div>', unsafe_allow_html=True)
+            else:
+                cols[6].markdown(_cell("—", "muted"), unsafe_allow_html=True)
+            cols[7].checkbox("Occ", key=safe_key("occ", aid), label_visibility="collapsed")
+            cols[8].selectbox("Look", ["", "Y", "N", "YY", "Soso"], key=safe_key("look", aid), label_visibility="collapsed", placeholder="—")
+            cols[9].text_input("Comp", key=safe_key("comp", aid), label_visibility="collapsed", placeholder="—")
+            cols[10].text_input("Rehab", key=safe_key("rehab", aid), label_visibility="collapsed", placeholder="—")
+            cols[11].text_input("Profit", key=safe_key("profit", aid), label_visibility="collapsed", placeholder="—")
             comp, rehab, profit, maxb, bidpct, maxs = row_numbers(aid)
-            cols[11].markdown(_cell(money(maxb) or "—", "mono strong" if maxb else "mono muted"), unsafe_allow_html=True)
-            cols[12].markdown(_cell(pct(bidpct) or "—", "mono" if bidpct else "mono muted"), unsafe_allow_html=True)
-            cols[13].markdown(_cell(money(maxs) or "—", "mono" if maxs else "mono muted"), unsafe_allow_html=True)
-            cols[14].text_input("Note", key=safe_key("note", aid), label_visibility="collapsed", placeholder="Note")
-            render_ad_control(cols[15], r.get("Ad Link", ""), r.get("Auctioneer", ""), aid)
-            idx = 16
+            cols[12].markdown(_cell(money(maxb) or "—", "mono strong" if maxb else "mono muted"), unsafe_allow_html=True)
+            cols[13].markdown(_cell(pct(bidpct) or "—", "mono" if bidpct else "mono muted"), unsafe_allow_html=True)
+            cols[14].markdown(_cell(money(maxs) or "—", "mono" if maxs else "mono muted"), unsafe_allow_html=True)
+            cols[15].text_input("Note", key=safe_key("note", aid), label_visibility="collapsed", placeholder="Note")
+            render_ad_control(cols[16], r.get("Ad Link", ""), r.get("Auctioneer", ""), aid)
+            idx = 17
             if show_ai:
                 cols[idx].markdown(_cell(money(float(comp or 0) * multiplier) if comp else "—", "mono"), unsafe_allow_html=True)
                 cols[idx+1].markdown(_cell(money(maxb) or "—", "mono"), unsafe_allow_html=True)
                 idx += 2
             if show_links:
                 addr = r["Address"]
-                cols[idx].markdown(f'<div class="links"><a href="{zillow_link(addr)}" target="_blank" rel="noopener noreferrer" title="Zillow">Z</a><a href="{redfin_search_link(addr)}" target="_blank" rel="noopener noreferrer" title="Redfin">R</a></div>', unsafe_allow_html=True)
+                sdat_url = (vrec or {}).get("sdat_url", "")
+                sdat_a = f'<a href="{sdat_url}" target="_blank" rel="noopener noreferrer" title="MD SDAT record">S</a>' if sdat_url else ""
+                cols[idx].markdown(f'<div class="links"><a href="{zillow_link(addr)}" target="_blank" rel="noopener noreferrer" title="Zillow">Z</a><a href="{redfin_search_link(addr)}" target="_blank" rel="noopener noreferrer" title="Redfin">R</a>{sdat_a}</div>', unsafe_allow_html=True)
                 idx += 1
             if cols[idx].button("", icon=":material/visibility_off:", key=safe_key("hide", aid), help="Hide this property", use_container_width=True):
                 hide_address(r["Address"])
