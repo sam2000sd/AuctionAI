@@ -18,7 +18,8 @@ except Exception:
     sync_playwright = None
 
 from app.core.config import SCRAPED_DIR
-from app.core.utils import clean_text, is_cancelled_text
+from app.core.utils import clean_text, is_cancelled_text, loose_address_key
+import json
 
 HEADERS = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/124 Safari/537.36 Auction Intelligence"}
 REQUEST_TIMEOUT = 18
@@ -934,6 +935,190 @@ def parse_adc(include_concierge=False):
             })
     return dedupe(rows)
 
+ADC_AVM_QUERY = """query resiSearch_blueprint_seekListingsFromFilters($filters: ListingCompatabilityFilters!) {
+  seek_listings_from_filters(filters: $filters) { content { ... on Listing {
+    listing_id listing_page_path formatted_address(format: DOUBLE_LINE)
+    listing_configuration { product_type occupancy_status }
+    venue { venue_type }
+    seller_property { street_description municipality postal_code }
+    external_information(resolvePolicy: CACHE_ONLY) { collateral { summary { estimated low high type } } }
+    primary_property { summary { square_footage year_built lot_size } }
+  } } } }"""
+
+AVM_PATH = SCRAPED_DIR / "avm_adc.json"
+
+
+def _first(x):
+    if isinstance(x, list):
+        return x[0] if x else {}
+    return x or {}
+
+
+def refresh_avm():
+    """Estimated market values (Cotality AVM via Auction.com) for every live trustee sale
+    in MD/DC, keyed by loose street address so rows from AC/TW/HW/MWC/BL match too.
+    Writes SCRAPED_DIR/avm_adc.json. Cheap: two requests."""
+    out = {}
+    for state in ["MD", "DC"]:
+        variables = {"filters": {"property_state": state, "listing_type": "active", "sort": "auction_date_order", "limit": 500, "version": 1, "offset": 0}}
+        try:
+            r = requests.post(URLS["ADC_GRAPH"], headers=ADC_HEADERS, json={"query": ADC_AVM_QUERY, "variables": variables}, timeout=REQUEST_TIMEOUT + 12)
+            r.raise_for_status()
+            items = (((r.json() or {}).get("data") or {}).get("seek_listings_from_filters") or {}).get("content") or []
+        except Exception:
+            continue
+        for it in items:
+            if (it.get("venue") or {}).get("venue_type") != "LIVE":
+                continue
+            fa = it.get("formatted_address") or []
+            sp = it.get("seller_property") or {}
+            street = clean_text(fa[0]) if fa else clean_text(sp.get("street_description", ""))
+            address = ", ".join([x for x in [street, clean_text(sp.get("municipality", "")).title(), f"{state} {clean_text(sp.get('postal_code', ''))}".strip()] if x])
+            key = loose_address_key(address)
+            if not key:
+                continue
+            summaries = (_first(it.get("external_information")).get("collateral") or {})
+            summaries = _first(summaries).get("summary") if isinstance(summaries, list) else summaries.get("summary")
+            if not isinstance(summaries, list):
+                summaries = [summaries] if summaries else []
+            est = {}
+            for sm in summaries:
+                if not sm:
+                    continue
+                t = str(sm.get("type") or "").lower()
+                if t == "rental":
+                    est["rent"] = sm.get("estimated")
+                else:
+                    est["value"] = sm.get("estimated"); est["low"] = sm.get("low"); est["high"] = sm.get("high")
+            ps = ((it.get("primary_property") or {}).get("summary") or {})
+            out[key] = {
+                "address": address,
+                "value": est.get("value"), "low": est.get("low"), "high": est.get("high"), "rent": est.get("rent"),
+                "sqft": ps.get("square_footage"), "year": ps.get("year_built"), "lot": ps.get("lot_size"),
+                "occupancy": (it.get("listing_configuration") or {}).get("occupancy_status") or "",
+                "adc_url": URLS["ADC_SITE"] + str(it.get("listing_page_path") or ""),
+            }
+    if out:
+        SCRAPED_DIR.mkdir(parents=True, exist_ok=True)
+        AVM_PATH.write_text(json.dumps({"updated": datetime.now().isoformat(timespec="seconds"), "rows": out}), encoding="utf-8")
+    return out
+
+
+def load_avm():
+    try:
+        return json.loads(AVM_PATH.read_text(encoding="utf-8")).get("rows", {})
+    except Exception:
+        return {}
+
+# ---------------------------------------------------------------------------
+# Property values: Cotality AVM via Auction.com (market estimate, partial coverage)
+# + Maryland SDAT assessment via opendata.maryland.gov (every MD parcel).
+# ---------------------------------------------------------------------------
+VALUES_PATH = SCRAPED_DIR / "values.json"
+SDAT_URL = "https://opendata.maryland.gov/resource/ed4q-f8tm.json"
+SDAT_HEADERS = {"User-Agent": HEADERS["User-Agent"], "Accept": "application/json"}
+SDAT_SELECT = ",".join([
+    "mdp_street_address_mdp_field_address",
+    "mdp_street_address_city_mdp_field_city",
+    "current_assessment_year_total_assessment_sdat_field_172",
+    "c_a_m_a_system_data_structure_area_sq_ft_mdp_field_sqftstrc_sdat_field_241",
+    "c_a_m_a_system_data_year_built_yyyy_mdp_field_yearblt_sdat_field_235",
+    "sales_segment_1_consideration_mdp_field_considr1_sdat_field_90",
+    "sales_segment_1_transfer_date_yyyy_mm_dd_mdp_field_tradate_sdat_field_89",
+    "record_key_owner_occupancy_code_mdp_field_ooi_sdat_field_6",
+    "land_use_code_mdp_field_lu_desclu_sdat_field_50",
+    "record_key_county_code_sdat_field_1",
+    "record_key_district_ward_sdat_field_2",
+    "record_key_account_number_sdat_field_3",
+])
+
+
+def _num(v):
+    try:
+        f = float(str(v).replace(",", "").replace("$", "").strip())
+        return int(f) if f else 0
+    except Exception:
+        return 0
+
+
+def sdat_lookup(address):
+    """Maryland SDAT record for one street address (zip + house number, then street word match)."""
+    key = loose_address_key(address)
+    parts = key.split("|")
+    if len(parts) != 3 or not all(parts):
+        return None
+    num, word, zipc = parts
+    params = {
+        "premise_address_zip_code_mdp_field_premzip_sdat_field_26": zipc,
+        "premise_address_number_mdp_field_premsnum_sdat_field_20": num.zfill(5),
+        "$limit": 50,
+        "$select": SDAT_SELECT,
+    }
+    try:
+        r = requests.get(SDAT_URL, params=params, headers=SDAT_HEADERS, timeout=30)
+        if r.status_code != 200:
+            return None
+        rows = [x for x in r.json() if word in str(x.get("mdp_street_address_mdp_field_address", "")).upper().split()]
+    except Exception:
+        return None
+    if not rows:
+        return None
+    x = rows[0]
+    county = x.get("record_key_county_code_sdat_field_1", "")
+    district = x.get("record_key_district_ward_sdat_field_2", "")
+    acct = x.get("record_key_account_number_sdat_field_3", "")
+    link = ""
+    if county and acct:
+        link = f"https://sdat.dat.maryland.gov/RealProperty/Pages/viewdetails.aspx?County={county}&SearchType=ACCT&District={district}&AccountNumber={acct}"
+    return {
+        "assessed": _num(x.get("current_assessment_year_total_assessment_sdat_field_172")),
+        "sqft": _num(x.get("c_a_m_a_system_data_structure_area_sq_ft_mdp_field_sqftstrc_sdat_field_241")),
+        "year": _num(x.get("c_a_m_a_system_data_year_built_yyyy_mdp_field_yearblt_sdat_field_235")),
+        "last_sale": _num(x.get("sales_segment_1_consideration_mdp_field_considr1_sdat_field_90")),
+        "last_sale_date": str(x.get("sales_segment_1_transfer_date_yyyy_mm_dd_mdp_field_tradate_sdat_field_89") or "")[:10],
+        "owner_occupied": str(x.get("record_key_owner_occupancy_code_mdp_field_ooi_sdat_field_6") or "").upper() == "H",
+        "land_use": str(x.get("land_use_code_mdp_field_lu_desclu_sdat_field_50") or ""),
+        "sdat_url": link,
+    }
+
+
+def load_values():
+    try:
+        return json.loads(VALUES_PATH.read_text(encoding="utf-8")).get("rows", {})
+    except Exception:
+        return {}
+
+
+def refresh_property_values(addresses, force=False, max_new=80):
+    """Merge AVM (Auction.com) + SDAT assessment for the given addresses into values.json.
+    Cached keys are not re-fetched unless force=True. Bounded to max_new lookups per call."""
+    values = load_values()
+    avm = refresh_avm() or load_avm()
+    fetched = 0
+    for addr in addresses:
+        key = loose_address_key(addr)
+        if not key:
+            continue
+        rec = values.get(key, {})
+        a = avm.get(key)
+        if a:
+            rec.update({"est": a.get("value") or rec.get("est"), "est_low": a.get("low"), "est_high": a.get("high"), "rent": a.get("rent"),
+                        "sqft": rec.get("sqft") or a.get("sqft"), "year": rec.get("year") or a.get("year"), "adc_url": a.get("adc_url")})
+        needs_sdat = force or ("assessed" not in rec)
+        if needs_sdat and fetched < max_new and "MD" in str(addr).upper():
+            sd = sdat_lookup(addr)
+            fetched += 1
+            if sd:
+                rec.update(sd)
+            else:
+                rec.setdefault("assessed", 0)  # remember the miss so we do not retry every scrape
+        if rec:
+            rec["address"] = addr
+            values[key] = rec
+    SCRAPED_DIR.mkdir(parents=True, exist_ok=True)
+    VALUES_PATH.write_text(json.dumps({"updated": datetime.now().isoformat(timespec="seconds"), "rows": values}), encoding="utf-8")
+    return values
+
 def dedupe(rows):
     seen, out = set(), []
     for r in rows:
@@ -949,6 +1134,10 @@ def scrape_source(source, clear_old=False):
     parser = {"AC": parse_ac, "TW": parse_tw, "HW": parse_hw, "MWC": parse_mwc, "BL": parse_bl, "ADC": parse_adc}[source]
     rows = parser()
     path = write_rows(source, rows)
+    try:
+        refresh_property_values([r.get("address", "") for r in rows])
+    except Exception:
+        pass
     return {"ok": True, "rows": len(rows), "path": str(path or ""), "error": ""}
 
 def scrape_many(sources, clear_old=True):
