@@ -432,19 +432,32 @@ def parse_ac():
                     args=["--no-sandbox", "--disable-dev-shm-usage"],
                 )
                 page = browser.new_page(viewport={"width": 1700, "height": 3000})
-                page.goto(URLS["AC"], wait_until="domcontentloaded", timeout=45000)
-                # Wait for AC's JS-rendered foreclosure list, but do not hang forever.
-                try:
-                    page.wait_for_selector("text=Foreclosures", timeout=12000)
-                except Exception:
-                    pass
-                try:
-                    page.wait_for_selector("text=VIEW AD", timeout=12000)
-                except Exception:
-                    pass
-                page.wait_for_timeout(2500)
-                text = page.locator("body").inner_text(timeout=15000)
-                html = page.content()
+                # AC's backend caps each page at 100 lots regardless of ?limit=, so
+                # a single load silently drops everything past lot 100. Walk pages
+                # until a page renders no active rows (or a hard cap is reached).
+                texts, htmls = [], []
+                for page_no in range(1, 8):
+                    url = URLS["AC"] if page_no == 1 else f"{URLS['AC']}&page={page_no}"
+                    page.goto(url, wait_until="domcontentloaded", timeout=45000)
+                    # Wait for AC's JS-rendered foreclosure list, but do not hang forever.
+                    try:
+                        page.wait_for_selector("text=Foreclosures", timeout=12000)
+                    except Exception:
+                        pass
+                    try:
+                        page.wait_for_selector("text=VIEW AD", timeout=12000)
+                    except Exception:
+                        pass
+                    page.wait_for_timeout(2500)
+                    t = page.locator("body").inner_text(timeout=15000)
+                    if "VIEW AD" not in t.upper():
+                        break
+                    if texts and t == texts[-1]:
+                        break
+                    texts.append(t)
+                    htmls.append(page.content())
+                text = "\n".join(texts)
+                html = "\n".join(htmls)
                 browser.close()
         except Exception as e:
             try:
