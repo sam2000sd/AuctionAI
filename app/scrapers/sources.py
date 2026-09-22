@@ -35,6 +35,9 @@ URLS = {
     "TW_AD": "https://www.tidewaterauctions.com/default.aspx/GetAd",
     "ADC_GRAPH": "https://graph.auction.com/graphql",
     "ADC_SITE": "https://www.auction.com",
+    "RA": "https://rosenberg-assoc.com/foreclosure-sales/",
+    "DR": "https://thedailyrecord.com/public-notice/search-results?indexgroup=real_estate&searchType=advanced&PubDateRange=-90&fromTime=&toTime=",
+    "DR_PAGE": "https://thedailyrecord.com/public-notice/search-results?indexgroup=real_estate&PubDateRange=-90&fromTime&toTime&pageindex={i}&searchType=advanced",
 }
 
 MONTHS = {
@@ -1132,6 +1135,183 @@ def refresh_property_values(addresses, force=False, max_new=80):
     VALUES_PATH.write_text(json.dumps({"updated": datetime.now().isoformat(timespec="seconds"), "rows": values}), encoding="utf-8")
     return values
 
+BROWSER_HEADERS = {
+    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36",
+    "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+    "Accept-Language": "en-US,en;q=0.9",
+}
+
+
+def parse_ra():
+    """Rosenberg & Associates (rosenberg-assoc.com) trustee sales table.
+
+    Law-firm list, so many rows are the same sales Alex Cooper / Harvey West run;
+    the app de-duplicates across sources by street address. Adds case number,
+    deposit and sold/cancelled flags. VA rows are skipped.
+    """
+    r = requests.get(URLS["RA"], headers=BROWSER_HEADERS, timeout=REQUEST_TIMEOUT + 12)
+    r.raise_for_status()
+    soup = BeautifulSoup(r.text, "html.parser")
+    table = soup.find("table")
+    if table is None:
+        return []
+    rows = []
+    header = None
+    for tr in table.find_all("tr"):
+        cells = [clean_text(c.get_text(" ")) for c in tr.find_all(["th", "td"])]
+        if not cells:
+            continue
+        if header is None:
+            header = [c.lower() for c in cells]
+            continue
+        rec = dict(zip(header, cells))
+        state = rec.get("state", "").upper()
+        if state not in {"MD", "DC"}:
+            continue
+        if rec.get("cancelled", "").upper().startswith("Y") or rec.get("soldid", "").strip():
+            continue
+        m = re.match(r"(\d{1,2})-(\d{1,2})-(\d{4})", rec.get("sale date", ""))
+        if not m:
+            continue
+        sale_date = f"{int(m.group(1)):02d}/{int(m.group(2)):02d}/{m.group(3)}"
+        t = rec.get("sale time", "").upper().replace(" ", "")
+        sale_time = t if re.match(r"\d{1,2}:\d{2}(AM|PM)", t) else ""
+        street = rec.get("property address", "")
+        if not re.search(r"\d", street):
+            continue
+        city, zipc = rec.get("city", ""), rec.get("zip", "")
+        address = ", ".join(x for x in [street, city, (f"{state} {zipc}".strip() if zipc else state)] if x)
+        juris = rec.get("jurisdiction", "")
+        county = "Washington, DC" if state == "DC" else (juris if juris.lower().endswith(("city", "county")) else f"{juris} County")
+        dep = re.sub(r"\s+", "", rec.get("deposit", ""))
+        rows.append({
+            "source": "RA", "auctioneer": "RA", "sale date": sale_date, "sale time": sale_time,
+            "county": county, "address": address, "deposit": dep if dep.startswith("$") else "SEE AD",
+            "status": "Active", "ad link": URLS["RA"], "case": rec.get("case number", ""),
+        })
+    return dedupe(rows)
+
+
+DR_DETAILS_PATH = SCRAPED_DIR / "dr_details.json"
+DR_MAX_DETAIL_FETCHES = 60  # per run; the rest are filled in on later runs (cache persists)
+
+
+def _dr_parse_ad_text(text, hint=""):
+    """Pull sale time and deposit out of a Daily Record trustee's-sale legal ad."""
+    t = clean_text(text)
+    out = {"time": "", "deposit": "", "address": ""}
+    m = re.search(
+        r"\bon\s+(?:[A-Z][a-z]+day,?\s+)?(January|February|March|April|May|June|July|August|September|October|November|December)\s+\d{1,2},?\s+\d{4},?\s+at\s+(\d{1,2}(?::\d{2})?)\s*([ap])\.?\s*m\b",
+        t, re.I,
+    )
+    if m:
+        hhmm = m.group(2) if ":" in m.group(2) else f"{m.group(2)}:00"
+        out["time"] = f"{hhmm} {m.group(3).upper()}M"
+    d = re.search(r"deposit\s+(?:of|in the amount of)?\s*\$\s*([\d,]{4,})", t, re.I)
+    if d:
+        out["deposit"] = f"${d.group(1)}"
+    out["address"] = _dr_find_address(t, hint)
+    return out
+
+
+def _dr_find_address(text, hint=""):
+    """Find 'NUMBER STREET, CITY, MD ZIP' in ad text. Legal ads open with the law firm's
+    own address, so anchor on the property's house number (from the notice heading)
+    first, then fall back to the first street-style address."""
+    t = clean_text(text).replace("Maryland", "MD")
+    num = re.match(r"\s*(\d{1,6}[A-Z]?)\b", str(hint or ""))
+    pats = []
+    if num:
+        pats.append(rf"\b({re.escape(num.group(1))}\s+[^,\d][^,]{{2,60}},\s*[A-Za-z .'\-]{{2,40}},\s*MD\s+\d{{5}})")
+    pats.append(r"\b(\d{1,6}[A-Z]?\s+(?:[NSEW]\.?\s+)?[A-Za-z][A-Za-z0-9.'\-]*(?:\s+[A-Za-z0-9.'\-#]+){0,4},\s*[A-Za-z .'\-]{2,40},\s*MD\s+\d{5})")
+    for p in pats:
+        m = re.search(p, t)
+        if m:
+            addr = re.sub(r"\s+", " ", m.group(1)).strip()
+            return re.sub(r"^\d{5}\s+(?:And|&)\s+", "", addr, flags=re.I)
+    return ""
+
+
+def parse_dr():
+    """Maryland Daily Record public notices (thedailyrecord.com) - the legal-ad paper
+    of record for Baltimore-area trustee sales. Catches sales by small law firms
+    that never appear on an auctioneer site. Search results are paginated 30/page
+    and pagination is session-bound, so one POST then GETs with the same cookies.
+    Sale time / deposit come from each notice's full ad text; those fetches are
+    cached in dr_details.json so each run only pulls new notices.
+    """
+    sess = requests.Session()
+    hdr = dict(BROWSER_HEADERS)
+    data = {
+        "search_Index": "auction", "PubDateRange": "-90", "auctionDate": "90",
+        "ad_search_state_auction": "MD", "searchType": "advanced", "indexGroup": "real_estate",
+    }
+    r = sess.post(URLS["DR"], data=data, headers=hdr, timeout=REQUEST_TIMEOUT + 12)
+    r.raise_for_status()
+    pages = [r.text]
+    for i in range(2, 41):
+        g = sess.get(URLS["DR_PAGE"].format(i=i), headers=hdr, timeout=REQUEST_TIMEOUT + 12)
+        if g.status_code != 200 or "pnsr-block" not in g.text:
+            break
+        pages.append(g.text)
+
+    try:
+        cache = json.loads(DR_DETAILS_PATH.read_text(encoding="utf-8"))
+    except Exception:
+        cache = {}
+    fetched = 0
+    rows = []
+    for html in pages:
+        soup = BeautifulSoup(html, "html.parser")
+        for blk in soup.select("div.searchresults div.pnsr-block"):
+            a = blk.find("a", href=True)
+            meta = clean_text(blk.select_one(".notice-meta").get_text(" ")) if blk.select_one(".notice-meta") else ""
+            m = re.search(r"County:\s*(.*?)\s*Auction Date:\s*(\d{1,2}/\d{1,2}/\d{4})", meta)
+            if not a or not m:
+                continue
+            county_raw, sale_date = m.group(1).strip(), m.group(2)
+            try:
+                if datetime.strptime(sale_date, "%m/%d/%Y").date() < datetime.now().date():
+                    continue
+            except ValueError:
+                continue
+            county = "Baltimore City" if county_raw.lower() == "baltimore city" else (county_raw if county_raw.lower().endswith("county") else f"{county_raw} County")
+            nid = re.search(r"detail=(\d+)", a["href"])
+            nid = nid.group(1) if nid else a["href"]
+            summary = clean_text(blk.select_one(".notice-summary").get_text(" ")) if blk.select_one(".notice-summary") else ""
+            heading = clean_text(blk.select_one(".notice-heading").get_text(" ")) if blk.select_one(".notice-heading") else ""
+            if is_cancelled_text(summary) or is_cancelled_text(heading):
+                continue
+            det = cache.get(nid)
+            if det is None and fetched < DR_MAX_DETAIL_FETCHES:
+                det = {"time": "", "deposit": "", "address": ""}
+                try:
+                    dr = sess.get(a["href"], headers=hdr, timeout=REQUEST_TIMEOUT + 12)
+                    if dr.status_code == 200:
+                        dsoup = BeautifulSoup(dr.text, "html.parser")
+                        area = dsoup.select_one(".notice-detail-area") or dsoup
+                        det = _dr_parse_ad_text(area.get_text(" "), heading)
+                except Exception:
+                    pass
+                cache[nid] = det
+                fetched += 1
+            det = det or {}
+            address = _dr_find_address(summary, heading) or det.get("address") or (f"{heading}, {county_raw}, MD" if heading else "")
+            if not re.search(r"\d", address):
+                continue
+            rows.append({
+                "source": "DR", "auctioneer": "DR", "sale date": sale_date, "sale time": det.get("time", ""),
+                "county": county, "address": address, "deposit": det.get("deposit") or "SEE AD",
+                "status": "Active", "ad link": a["href"],
+            })
+    try:
+        SCRAPED_DIR.mkdir(parents=True, exist_ok=True)
+        DR_DETAILS_PATH.write_text(json.dumps(cache), encoding="utf-8")
+    except Exception:
+        pass
+    return dedupe(rows)
+
+
 def dedupe(rows):
     seen, out = set(), []
     for r in rows:
@@ -1144,7 +1324,7 @@ def dedupe(rows):
 def scrape_source(source, clear_old=False):
     if clear_old:
         clear_cache()
-    parser = {"AC": parse_ac, "TW": parse_tw, "HW": parse_hw, "MWC": parse_mwc, "BL": parse_bl, "ADC": parse_adc}[source]
+    parser = {"AC": parse_ac, "TW": parse_tw, "HW": parse_hw, "MWC": parse_mwc, "BL": parse_bl, "ADC": parse_adc, "RA": parse_ra, "DR": parse_dr}[source]
     rows = parser()
     path = write_rows(source, rows)
     try:
