@@ -211,7 +211,10 @@ def normalize_county(value) -> str:
     return "Unknown County"
 
 def parse_datetime(date_value, time_value=""):
-    txt = f"{date_value or ''} {time_value or ''}".strip()
+    def _s(v):
+        v = "" if v is None or (isinstance(v, float) and pd.isna(v)) else str(v)
+        return "" if v.strip().lower() in {"nan", "none", "nat"} else v
+    txt = f"{_s(date_value)} {_s(time_value)}".strip()
     if not txt:
         return pd.NaT
     try:
