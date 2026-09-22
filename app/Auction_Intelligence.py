@@ -9,6 +9,7 @@ import os
 import re
 import sys
 import threading
+import time
 from http.server import BaseHTTPRequestHandler, HTTPServer
 
 import pandas as pd
@@ -26,6 +27,7 @@ from app.core.normalize import normalize_files
 from app.core.formulas import calc_bid
 from app.core.utils import money, pct, this_or_next_week, city_from_address, address_key, zillow_link, redfin_link, redfin_search_link, loose_address_key, MD_COUNTIES
 from app.scrapers.sources import scrape_many, clear_cache, load_values
+from app.storage.github_data import sync_scraped_from_github, last_synced
 from app.storage.local import load_bids, save_bids, merge_bids, load_hidden, hide_address, clear_hidden, load_blocked_cities, save_blocked_cities, load_favorite_properties, save_favorite_properties, toggle_favorite_property, load_layout_defaults, save_layout_defaults, remote_enabled
 
 st.set_page_config(page_title="Simo Homes · Auction Intelligence", page_icon="🏛️", layout="wide")
@@ -642,7 +644,10 @@ with st.sidebar:
         if remote_enabled():
             st.caption("Backups are saved to durable cloud storage and persist across restarts.")
         else:
-            st.caption("Backups are stored on this server only and may reset after a period of inactivity. Use Backup Archive / Export Excel below to keep your own copy.")
+            st.caption("Listings are refreshed automatically every 30 minutes from the GitHub data feed and re-downloaded after any restart. Your bids/notes are stored on this server only; use Backup Archive / Export Excel below to keep your own copy.")
+        _ls = last_synced().get("updated", "")
+        if _ls:
+            st.caption(f"Listings feed last updated: {_ls.replace('T', ' ').replace('Z', ' UTC')}")
 
     st.divider()
     st.header("Focus")
@@ -697,19 +702,19 @@ with st.sidebar:
 
 
 # ---------------------------------------------------------------------------
-# Scheduled background refresh. A scheduled task hits this URL with the secret
-# token every 30 min so listings stay current without anyone having to click
-# a Scrape button, and so the app doesn't lose its cache to a long idle sleep.
-# Ordinary visits never carry this param, so normal page loads stay instant
-# (see the "do not auto-run a full scrape on app launch" note below).
+# Scheduled data refresh lives in GitHub, not here. A GitHub Actions workflow
+# (.github/workflows/scrape.yml) scrapes every source every 30 min and publishes
+# the CSVs to the repo's `data` branch. On load we pull that set if it is newer
+# than what this server has. Cached for 5 min so page loads stay instant; the
+# check itself is one small HTTP request when it does run.
 # ---------------------------------------------------------------------------
-_AUTO_REFRESH_TOKEN = str(st.secrets.get("AUTO_REFRESH_TOKEN", "")).strip()
-if _AUTO_REFRESH_TOKEN and str(st.query_params.get("auto_refresh", "")) == _AUTO_REFRESH_TOKEN:
-    try:
-        scrape_many(AUCTION_HOUSES, clear_old=True)
-        st.cache_data.clear()
-    except Exception:
-        pass
+@st.cache_data(ttl=300, show_spinner=False)
+def _sync_published_data(_bucket: int):
+    return sync_scraped_from_github()
+
+_sync_status = _sync_published_data(int(time.time() // 300))
+if _sync_status.get("changed"):
+    load_data.clear()
 
 p = paths()
 # IMPORTANT: do not auto-run a full scrape on app launch.
