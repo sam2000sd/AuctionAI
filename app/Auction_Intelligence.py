@@ -696,6 +696,21 @@ with st.sidebar:
         st.success("Default layout saved.")
 
 
+# ---------------------------------------------------------------------------
+# Scheduled background refresh. A scheduled task hits this URL with the secret
+# token every 30 min so listings stay current without anyone having to click
+# a Scrape button, and so the app doesn't lose its cache to a long idle sleep.
+# Ordinary visits never carry this param, so normal page loads stay instant
+# (see the "do not auto-run a full scrape on app launch" note below).
+# ---------------------------------------------------------------------------
+_AUTO_REFRESH_TOKEN = str(st.secrets.get("AUTO_REFRESH_TOKEN", "")).strip()
+if _AUTO_REFRESH_TOKEN and str(st.query_params.get("auto_refresh", "")) == _AUTO_REFRESH_TOKEN:
+    try:
+        scrape_many(AUCTION_HOUSES, clear_old=True)
+        st.cache_data.clear()
+    except Exception:
+        pass
+
 p = paths()
 # IMPORTANT: do not auto-run a full scrape on app launch.
 # The launcher is portable and may be opened on a new computer; forcing AC/TW/HW/MWC
