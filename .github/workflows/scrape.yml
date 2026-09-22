@@ -1,0 +1,77 @@
+name: Scrape auctions (every 30 min)
+
+# Scrapes all auction sources on GitHub's schedule and publishes the CSVs to the
+# `data` branch. The Streamlit app downloads that branch on load, so listings
+# stay current (and survive app reboots) with no manual Scrape clicks and no
+# dependency on anything outside this repo.
+#
+# Publishing to a separate branch (not `main`) matters: Streamlit Cloud
+# redeploys on every push to `main`, and we do not want a restart every 30 min.
+
+on:
+  schedule:
+    - cron: '*/30 * * * *'
+  workflow_dispatch: {}
+
+concurrency:
+  group: scrape
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+
+jobs:
+  scrape:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+
+      - name: Install dependencies
+        run: |
+          pip install -r requirements.txt
+          playwright install --with-deps chromium
+
+      - name: Restore last published data (fallback if a site is down)
+        run: |
+          set -e
+          mkdir -p data/input/scraped
+          if git ls-remote --exit-code --heads origin data >/dev/null 2>&1; then
+            git fetch --depth=1 origin data
+            rm -rf /tmp/prev && mkdir -p /tmp/prev
+            git --work-tree=/tmp/prev checkout FETCH_HEAD -- scraped || true
+            if [ -d /tmp/prev/scraped ]; then
+              cp -r /tmp/prev/scraped/. data/input/scraped/
+              echo "restored $(ls data/input/scraped/*.csv 2>/dev/null | wc -l) previous CSVs"
+            fi
+          else
+            echo "no data branch yet"
+          fi
+
+      - name: Scrape all sources
+        env:
+          PYTHONUNBUFFERED: '1'
+        run: python scripts/scrape_all.py
+
+      - name: Publish to data branch
+        env:
+          TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -e
+          rm -rf /tmp/pub && mkdir -p /tmp/pub/scraped
+          cp -r data/input/scraped/. /tmp/pub/scraped/
+          # never publish scratch/debug files
+          find /tmp/pub -name '*.pyc' -delete
+          cd /tmp/pub
+          git init -q -b data
+          git config user.name "auction-scraper[bot]"
+          git config user.email "actions@users.noreply.github.com"
+          git add -A
+          git commit -qm "scrape $(date -u +%Y-%m-%dT%H:%MZ)"
+          git push -qf "https://x-access-token:${TOKEN}@github.com/${GITHUB_REPOSITORY}.git" data
+          echo "published $(ls scraped/*.csv | wc -l) CSVs"
