@@ -21,11 +21,11 @@ sys.path.insert(0, str(ROOT))
 from app.core.config import SCRAPED_DIR  # noqa: E402
 from app.scrapers.sources import scrape_many  # noqa: E402
 
-ALL_SOURCES = ["AC", "TW", "HW", "MWC", "BL", "ADC"]
+ALL_SOURCES = ["AC", "TW", "HW", "MWC", "BL", "ADC", "RA", "DR"]
 # A source that comes back with fewer rows than this is treated as a failed
 # scrape (site down, bot-blocked, layout changed). We keep the previous good
 # CSV for it instead of publishing an empty list and wiping the app's data.
-MIN_ROWS = {"AC": 20, "TW": 5, "HW": 5, "MWC": 0, "BL": 3, "ADC": 0}
+MIN_ROWS = {"AC": 20, "TW": 5, "HW": 5, "MWC": 0, "BL": 3, "ADC": 0, "RA": 3, "DR": 10}
 
 
 def main(argv: list[str]) -> int:
@@ -68,7 +68,7 @@ def main(argv: list[str]) -> int:
             p.unlink(missing_ok=True)
 
     files = sorted(p.name for p in SCRAPED_DIR.glob("*.csv"))
-    for extra in ("values.json", "avm_adc.json"):
+    for extra in ("values.json", "avm_adc.json", "dr_details.json"):
         if (SCRAPED_DIR / extra).exists():
             files.append(extra)
     ads_dir = SCRAPED_DIR / "ads"
