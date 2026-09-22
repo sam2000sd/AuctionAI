@@ -252,8 +252,8 @@ a:hover { text-decoration: underline; }
 SCRAPED_DIR.mkdir(parents=True, exist_ok=True)
 EXPORT_DIR.mkdir(parents=True, exist_ok=True)
 layout_defaults = load_layout_defaults()
-AUCTION_HOUSES = ["AC", "TW", "HW", "MWC", "BL", "ADC"]
-SOURCE_NAMES = {"AC": "Alex Cooper", "TW": "Tidewater", "HW": "Harvey West", "MWC": "McCabe Weisberg", "BL": "A. J. Billig", "ADC": "Auction.com"}
+AUCTION_HOUSES = ["AC", "TW", "HW", "MWC", "BL", "ADC", "RA", "DR"]
+SOURCE_NAMES = {"AC": "Alex Cooper", "TW": "Tidewater", "HW": "Harvey West", "MWC": "McCabe Weisberg", "BL": "A. J. Billig", "ADC": "Auction.com", "RA": "Rosenberg & Assoc.", "DR": "Daily Record notices"}
 DEFAULT_COUNTY_FILTER = ["Montgomery County", "Prince George's County", "Howard County", "Frederick County", "Anne Arundel County", "Washington, DC"]
 
 def default_value(key, fallback):
@@ -361,6 +361,8 @@ def clean_external_url(raw, auctioneer=""):
             "MWC": "https://apps.mwc-law.com",
             "BL": "https://ajbillig.com",
             "ADC": "https://www.auction.com",
+            "RA": "https://rosenberg-assoc.com",
+            "DR": "https://thedailyrecord.com",
         }
         base = base_by_auctioneer.get(str(auctioneer or "").upper(), "")
         url = base + url if base else ""
@@ -584,7 +586,7 @@ def build_save_df(df, multiplier, sale_net, close1, close2):
 
 st.markdown('<div class="app-brand"><span class="badge">SIMO HOMES</span><span class="env">Maryland / DC foreclosure auctions</span></div>', unsafe_allow_html=True)
 st.title("Auction Intelligence")
-st.caption("Sources: Alex Cooper (AC) · Tidewater (TW) · Harvey West (HW) · McCabe Weisberg (MWC) · A. J. Billig (BL) · Auction.com in-person (ADC)")
+st.caption("Sources: Alex Cooper (AC) · Tidewater (TW) · Harvey West (HW) · McCabe Weisberg (MWC) · A. J. Billig (BL) · Auction.com in-person (ADC) · Rosenberg & Assoc. (RA) · Daily Record legal notices (DR)")
 
 
 def persist_user_state_before_refresh():
@@ -626,6 +628,11 @@ with st.sidebar:
         persist_user_state_before_refresh(); st.session_state.last_scrape = scrape_many(["BL"], clear_old=False); st.cache_data.clear(); st.session_state.pop("loaded_ids", None); st.rerun()
     if st.button("Scrape ADC (Auction.com)", use_container_width=True):
         persist_user_state_before_refresh(); st.session_state.last_scrape = scrape_many(["ADC"], clear_old=False); st.cache_data.clear(); st.session_state.pop("loaded_ids", None); st.rerun()
+    c5, c6 = st.columns(2)
+    if c5.button("Scrape RA"):
+        persist_user_state_before_refresh(); st.session_state.last_scrape = scrape_many(["RA"], clear_old=False); st.cache_data.clear(); st.session_state.pop("loaded_ids", None); st.rerun()
+    if c6.button("Scrape DR"):
+        persist_user_state_before_refresh(); st.session_state.last_scrape = scrape_many(["DR"], clear_old=False); st.cache_data.clear(); st.session_state.pop("loaded_ids", None); st.rerun()
 
     if st.button("Full Refresh Selected", type="primary", use_container_width=True):
         persist_user_state_before_refresh(); st.session_state.last_scrape = scrape_many(selected, clear_old=True); st.cache_data.clear(); st.session_state.pop("loaded_ids", None); st.rerun()
@@ -729,21 +736,27 @@ if not df.empty:
     df["County"] = df["County"].apply(lambda x: x if x in MD_COUNTIES else "Unknown County")
 
 def _loose_addr_key(addr):
-    """Street number + first real street word + zip. Catches the same property listed by
-    two sources with slightly different formatting (e.g. '5865E BONIWOOD TURN' vs '5865 E Boniwood Turn')."""
-    a = str(addr or "").upper()
+    """Street number + first street word + unit (if any) + zip. Tolerates the formatting
+    differences between sources ('1203 W Cross St, Baltimore, MD 21230' vs
+    '1203 W CROSS STREET, BALTIMORE, 21230 (SALE BY ...)')."""
+    a = re.sub(r"\([^)]*\)", " ", str(addr or "").upper())
     num = re.match(r"\s*(\d+)", a)
     num = num.group(1) if num else ""
-    words = [w for w in re.findall(r"[A-Z]+", a.split(",")[0]) if w not in {"E", "W", "N", "S", "NE", "NW", "SE", "SW", "UNIT", "APT", "STE"}]
-    zipm = re.search(r"\b(\d{5})(?:-\d{4})?\s*$", a)
-    return (num + "|" + (words[0] if words else "") + "|" + (zipm.group(1) if zipm else "")) if num else a
+    street_part = a.split(",")[0]
+    words = [w for w in re.findall(r"[A-Z]+", street_part) if w not in {"E", "W", "N", "S", "NE", "NW", "SE", "SW", "UNIT", "APT", "STE"}]
+    unit = re.search(r"\b(?:UNIT|APT|STE|#)\s*#?\s*([A-Z0-9\-]+)", a)
+    if not num:
+        return a
+    zipm = re.search(r"\b(\d{5})(?:-\d{4})?\b(?!.*\b\d{5}\b)", a[len(num):])
+    return "|".join([num, words[0] if words else "", unit.group(1) if unit else "", zipm.group(1) if zipm else ""])
 
 def dedupe_across_sources(frame):
     """One row per property across ALL sources. Prefer the auctioneer that actually runs
-    the sale (AC/TW/HW/MWC/BL) over a listing-only source (ADC), then prefer rows with an ad."""
+    the sale (AC/TW/HW/MWC/BL) over a law-firm list (RA), a legal-notice feed (DR) or a
+    listing-only source (ADC), then prefer rows with an ad."""
     if frame.empty or "Address" not in frame:
         return frame
-    pref = {"ADC": 9}
+    pref = {"RA": 5, "DR": 7, "ADC": 9}
     f = frame.copy()
     f["_lk"] = f["Address"].apply(_loose_addr_key)
     f["_rank"] = f["Auctioneer"].map(lambda x: pref.get(str(x).upper(), 0)) + f["Ad Link"].apply(lambda x: 0 if str(x or "").strip() and str(x).lower() not in {"nan", "none"} else 1)
