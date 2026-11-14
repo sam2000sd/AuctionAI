@@ -1,0 +1,4 @@
+source,auctioneer,sale date,sale time,county,address,deposit,status,ad link,venue,occupancy
+ADC,ADC,2026-11-19,1:00 PM,Baltimore County,"9012 Old Harford Rd, Baltimore, MD 21234",100%,Active,https://www.auction.com/details/9012-old-harford-rd-baltimore-md-2201551,Baltimore County - Circuit Court Outside Main Entrance — 401 Bosley Avenue Baltimore,Occupied
+ADC,ADC,2026-11-25,1:00 PM,Mont. County,"8912 16th Street, Unit #8912, Silver Spring, MD 20910",100%,Active,https://www.auction.com/details/8912-16th-st-silver-spring-md-2210742,Montgomery County Circuit Court - Outside Main Entrance — 50 Maryland Avenue Rockville,Occupied
+ADC,ADC,2026-11-25,2:15 PM,Washington County,"107 N Artizan Street, Williamsport, MD 21795",100%,Active,https://www.auction.com/details/107-n-artizan-st-williamsport-md-2186762,Washington County Circuit Courthouse - Outside Main Entrance — 95 West Washington Street Hagerstown,Occupied
